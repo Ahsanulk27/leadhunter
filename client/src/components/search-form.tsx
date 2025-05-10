@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Search, SlidersHorizontal } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import IndustryLoadingSpinner from "@/components/industry-loading-spinner";
 
 interface SearchFormProps {
@@ -16,6 +17,7 @@ interface SearchFormProps {
 
 export default function SearchForm({ onSearch, isLoading }: SearchFormProps) {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const { toast } = useToast();
   
   const { register, handleSubmit, watch, setValue, formState } = useForm({
     defaultValues: {
@@ -31,6 +33,16 @@ export default function SearchForm({ onSearch, isLoading }: SearchFormProps) {
   const watchPrioritizeDecisionMakers = watch("prioritizeDecisionMakers");
 
   const handleFormSubmit = (data: any) => {
+    // Validate that at least one search criteria is provided
+    if (!data.industry && !data.company && !data.location) {
+      toast({
+        title: "Missing search criteria",
+        description: "Please provide at least an industry, company name, or location",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     onSearch(data);
   };
 
