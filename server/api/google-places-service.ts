@@ -58,8 +58,48 @@ export class GooglePlacesService {
         timestamp: call.timestamp.toISOString(),
         endpoint: call.endpoint,
         status: call.status
-      }))
+      })),
+      status: recentCalls.length < this.dailyQuota ? 'OK' : 'QUOTA_EXCEEDED'
     };
+  }
+  
+  /**
+   * Check if the daily API quota has been exceeded or is near the limit
+   * Returns true if quota is exceeded or if we're within 5% of the limit
+   */
+  private isQuotaExceeded(): boolean {
+    const quotaInfo = this.getQuotaUsage();
+    
+    // Consider quota exceeded if we're within 5% of the limit to avoid potential overages
+    const safetyThreshold = this.dailyQuota * 0.95;
+    
+    if (quotaInfo.total_calls_24h >= safetyThreshold) {
+      console.warn(`⚠️ GooglePlacesService: API quota nearly exceeded: ${quotaInfo.total_calls_24h}/${this.dailyQuota} (${quotaInfo.quota_used_percent.toFixed(1)}%)`);
+      return true;
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Gracefully handle API quota errors
+   */
+  private handleQuotaError(error: any): void {
+    console.error('⛔ GooglePlacesService: API quota exceeded or error', error);
+    
+    // Track this as a quota error
+    this.trackApiCall('quota_error', 'QUOTA_EXCEEDED');
+    
+    console.error(`
+      ====================================================
+      ⛔ GOOGLE PLACES API QUOTA WARNING ⛔
+      ----------------------------------------------------
+      The Google Places API quota has been exceeded or is close to limit.
+      Further API calls will be limited until quota resets.
+      Current usage: ${this.getQuotaUsage().total_calls_24h}/${this.dailyQuota}
+      Percentage used: ${this.getQuotaUsage().quota_used_percent.toFixed(1)}%
+      ====================================================
+    `);
   }
   
   /**
@@ -123,9 +163,9 @@ export class GooglePlacesService {
       this.trackApiCall('textsearch', data.status);
       let allResults: any[] = [];
       let pageCount = 0;
-      // Google Places API typically returns up to 60 results (3 pages of 20 each)
-      // but we'll continue fetching as long as there are more pages available
-      const MAX_PAGES = 10; // Increased to a higher limit to get all available data
+      // Google Places API can return multiple pages of results
+      // We'll continue fetching until no more pages are available or we hit rate limits
+      const MAX_PAGES = 100; // Set to a high number to effectively remove the artificial limit
       
       if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
         const errorMessage = `❌ GooglePlacesService: API error: ${data.status}`;
@@ -172,7 +212,13 @@ export class GooglePlacesService {
       
       // Continue fetching pages as long as there's a next_page_token available
       // The Google Places API will automatically stop providing tokens when no more results are available
+      // We implement recursive pagination until no more pages exist
       while (data.next_page_token && pageCount < MAX_PAGES) {
+        // Check API quota before making the next request
+        if (this.isQuotaExceeded()) {
+          console.log(`⚠️ GooglePlacesService: Daily quota reached, stopping pagination at page ${pageCount}`);
+          break;
+        }
         // Need to wait a bit before using the next page token
         await new Promise(resolve => setTimeout(resolve, 2000));
         
@@ -288,13 +334,20 @@ export class GooglePlacesService {
   /**
    * Get detailed information about a place
    */
-  private async getPlaceDetails(placeId: string): Promise<any> {
+  private async getPlaceDetails(placeId: string, retryCount = 0): Promise<any> {
     try {
+      // Check quota before making the API call
+      if (this.isQuotaExceeded()) {
+        this.handleQuotaError({ message: 'Quota exceeded during place details fetch' });
+        return {}; // Return empty object if quota is exceeded
+      }
+      
       const detailsUrl = 'https://maps.googleapis.com/maps/api/place/details/json';
       const response = await axios.get(detailsUrl, {
         params: {
           place_id: placeId,
-          fields: 'name,formatted_phone_number,website,opening_hours,url,address_component,editorial_summary',
+          // Expanded fields to get more contact information
+          fields: 'name,formatted_phone_number,website,opening_hours,url,address_component,editorial_summary,international_phone_number,formatted_address,types,rating,user_ratings_total,photos,geometry,vicinity,plus_code',
           key: this.apiKey
         }
       });
@@ -306,7 +359,21 @@ export class GooglePlacesService {
       
       if (data.status !== 'OK') {
         console.error(`❌ GooglePlacesService: Failed to get place details: ${data.status}`);
+        
+        // If we have retry attempts left and it's a retriable error, try again
+        if (retryCount < 2 && data.status !== 'NOT_FOUND' && data.status !== 'INVALID_REQUEST') {
+          console.log(`⚠️ Retrying place details fetch for ${placeId}, attempt ${retryCount + 1}`);
+          // Wait a bit before retrying
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          return this.getPlaceDetails(placeId, retryCount + 1);
+        }
+        
         return {};
+      }
+      
+      // Log if we got data after a retry attempt
+      if (retryCount > 0) {
+        console.log(`✅ Successfully fetched place details for ${placeId} after ${retryCount} retry attempts`);
       }
       
       return data.result;
@@ -314,6 +381,14 @@ export class GooglePlacesService {
       console.error(`❌ GooglePlacesService: Error getting place details:`, error);
       // Track failed API call
       this.trackApiCall('placedetails', 'ERROR');
+      
+      // Retry on network errors or timeouts
+      if (retryCount < 2) {
+        console.log(`⚠️ Retrying place details fetch after error for ${placeId}, attempt ${retryCount + 1}`);
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Longer wait on error
+        return this.getPlaceDetails(placeId, retryCount + 1);
+      }
+      
       return {};
     }
   }
