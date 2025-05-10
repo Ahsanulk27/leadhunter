@@ -52,7 +52,7 @@ export default function Sidebar() {
             return (
               <li key={item.href}>
                 <Link href={item.href}>
-                  <a
+                  <div
                     className={cn(
                       "flex items-center p-2 text-base font-medium rounded-lg",
                       isActive
@@ -67,7 +67,7 @@ export default function Sidebar() {
                       {item.icon}
                     </span>
                     <span className="ml-3">{item.title}</span>
-                  </a>
+                  </div>
                 </Link>
               </li>
             );

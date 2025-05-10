@@ -65,12 +65,13 @@ export default function SearchForm({ onSearch, isLoading }: SearchFormProps) {
                   <SelectValue placeholder="All Industries" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Industries</SelectItem>
+                  <SelectItem value="all">All Industries</SelectItem>
                   <SelectItem value="technology">Technology</SelectItem>
                   <SelectItem value="healthcare">Healthcare</SelectItem>
                   <SelectItem value="finance">Finance</SelectItem>
                   <SelectItem value="retail">Retail</SelectItem>
                   <SelectItem value="manufacturing">Manufacturing</SelectItem>
+                  <SelectItem value="real_estate">Real Estate</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -110,7 +111,7 @@ export default function SearchForm({ onSearch, isLoading }: SearchFormProps) {
                     <SelectValue placeholder="Any Size" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Any Size</SelectItem>
+                    <SelectItem value="any">Any Size</SelectItem>
                     <SelectItem value="1-10">1-10 employees</SelectItem>
                     <SelectItem value="11-50">11-50 employees</SelectItem>
                     <SelectItem value="51-200">51-200 employees</SelectItem>

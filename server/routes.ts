@@ -60,7 +60,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const savedCompany = await storage.createCompany(companyData);
       
       // Process and prioritize contacts
-      const contacts = scrapedData.contacts.map(contact => {
+      const contacts = scrapedData.contacts.map((contact: any) => {
         // Determine if this is a decision maker based on title
         const isDecisionMaker = isDecisionMakerTitle(contact.position);
         
@@ -77,7 +77,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Sort by relevance score
-      contacts.sort((a, b) => b.relevanceScore - a.relevanceScore);
+      contacts.sort((a: any, b: any) => b.relevanceScore - a.relevanceScore);
       
       // Mark the highest scoring contact as primary
       if (contacts.length > 0) {
@@ -216,7 +216,12 @@ function isDecisionMakerTitle(title: string = ""): boolean {
 }
 
 // Calculate relevance score for contact prioritization
-function calculateRelevanceScore(contact: any, prioritizeDecisionMakers: boolean = true): number {
+function calculateRelevanceScore(contact: { 
+  decisionMaker?: boolean; 
+  email?: string; 
+  phone?: string; 
+  position?: string; 
+}, prioritizeDecisionMakers: boolean = true): number {
   let score = 0;
   
   // Decision maker status is the most important factor
@@ -235,9 +240,24 @@ function calculateRelevanceScore(contact: any, prioritizeDecisionMakers: boolean
     "procurement", "business development"
   ];
   
-  if (contact.position && 
-      salesTargetRoles.some(role => contact.position.toLowerCase().includes(role))) {
-    score += 20;
+  // Real estate specific roles that are good for sales outreach
+  const realEstateTargetRoles = [
+    "broker", "owner", "managing", "acquisitions", "leasing",
+    "developer", "investor", "director"
+  ];
+  
+  if (contact.position) {
+    const positionLower = contact.position.toLowerCase();
+    
+    // Check general sales roles
+    if (salesTargetRoles.some(role => positionLower.includes(role))) {
+      score += 20;
+    }
+    
+    // Check real estate specific roles
+    if (realEstateTargetRoles.some(role => positionLower.includes(role))) {
+      score += 25;
+    }
   }
   
   return score;
@@ -270,6 +290,36 @@ function generateRandomIndustry(): string {
     "Retail", "Education", "Real Estate", "Energy"
   ];
   return industries[Math.floor(Math.random() * industries.length)];
+}
+
+function generateRealEstateCompanyData(companyName: string, location?: string): any {
+  // Real estate specific data
+  const realEstateTypes = [
+    "Residential Real Estate", "Commercial Real Estate", "Property Management", 
+    "Real Estate Development", "Luxury Real Estate", "Real Estate Investment", 
+    "Property Brokerage"
+  ];
+  
+  const propertyTypes = [
+    "Single Family Homes", "Condominiums", "Commercial Properties", 
+    "Office Buildings", "Retail Spaces", "Industrial Properties", 
+    "Multi-Family Units", "Luxury Estates"
+  ];
+  
+  const realEstateCompanySize = ["5-25", "26-50", "51-100", "101-250", "251-500"];
+  
+  // Generate company data
+  return {
+    name: companyName,
+    industry: "Real Estate",
+    subIndustry: realEstateTypes[Math.floor(Math.random() * realEstateTypes.length)],
+    specialties: propertyTypes.slice(0, 2 + Math.floor(Math.random() * 3)),
+    location: location || generateRandomLocation(),
+    size: realEstateCompanySize[Math.floor(Math.random() * realEstateCompanySize.length)],
+    address: generateRandomAddress(location),
+    yearEstablished: 1970 + Math.floor(Math.random() * 50),
+    contacts: generateRealEstateContacts(3 + Math.floor(Math.random() * 3), companyName)
+  };
 }
 
 function generateRandomLocation(): string {
@@ -348,6 +398,69 @@ function generateRandomContacts(count: number, companyName: string): any[] {
       email,
       phone,
     });
+  }
+  
+  return contacts;
+}
+
+function generateRealEstateContacts(count: number, companyName: string): any[] {
+  const contacts = [];
+  
+  // First names
+  const firstNames = ["John", "Jane", "Michael", "Sarah", "David", "Emily", "Robert", "Lisa", "James", "Jennifer", 
+                      "Richard", "Patricia", "Thomas", "Jessica", "William", "Elizabeth", "Daniel", "Karen"];
+  
+  // Last names
+  const lastNames = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Miller", "Davis", "Garcia", "Wilson", "Martinez",
+                     "Anderson", "Taylor", "Thomas", "Harris", "Moore", "Clark", "Lewis", "Young"];
+  
+  // Real estate specific positions with different levels of seniority
+  const realEstatePositions = [
+    "Broker/Owner", "Managing Broker", "Principal Broker", "Broker of Record", "CEO",
+    "VP of Sales", "VP of Property Management", "Director of Acquisitions", "Director of Leasing",
+    "Senior Real Estate Agent", "Real Estate Agent", "Realtor", "Commercial Broker",
+    "Property Manager", "Leasing Consultant", "Mortgage Broker", "Transaction Coordinator",
+    "Real Estate Developer", "Real Estate Investor", "Chief Investment Officer",
+    "Marketing Director", "Business Development Manager"
+  ];
+  
+  // Domain for email
+  const domain = companyName.toLowerCase().replace(/[^a-z0-9]/g, "") + ".com";
+  
+  // Ensure at least one decision maker
+  let hasDecisionMaker = false;
+  
+  for (let i = 0; i < count; i++) {
+    const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
+    const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
+    
+    // For the first contact or with 30% probability, make it a senior position
+    let position;
+    if (i === 0 || Math.random() < 0.3) {
+      position = realEstatePositions[Math.floor(Math.random() * 6)]; // Senior positions
+      hasDecisionMaker = true;
+    } else {
+      position = realEstatePositions[Math.floor(Math.random() * realEstatePositions.length)];
+    }
+    
+    // Generate email
+    const email = `${firstName.toLowerCase()[0]}${lastName.toLowerCase()}@${domain}`;
+    
+    // Generate direct phone
+    const areaCode = ["415", "212", "512", "312", "206", "617"][Math.floor(Math.random() * 6)];
+    const phone = `(${areaCode}) 555-${Math.floor(1000 + Math.random() * 9000)}`;
+    
+    contacts.push({
+      name: `${firstName} ${lastName}`,
+      position,
+      email,
+      phone,
+    });
+  }
+  
+  // If no decision makers were created, ensure at least one
+  if (!hasDecisionMaker && contacts.length > 0) {
+    contacts[0].position = realEstatePositions[Math.floor(Math.random() * 5)];
   }
   
   return contacts;
