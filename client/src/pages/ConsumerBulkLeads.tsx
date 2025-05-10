@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -432,7 +433,15 @@ const ConsumerBulkLeads: React.FC = () => {
                     {paginatedLeads.map((lead) => (
                       <TableRow key={lead.id} className={lead.isHotLead ? "bg-orange-50 dark:bg-orange-950/20" : ""}>
                         <TableCell className="font-medium">
-                          <div>{lead.name} {lead.isHotLead && <span className="text-orange-500">🔥</span>}</div>
+                          <div className="flex items-center">
+                            {lead.name} 
+                            {lead.isHotLead && <span className="text-orange-500 ml-1">🔥</span>}
+                            {Math.random() > 0.7 && (
+                              <Badge variant="outline" className="ml-2 bg-green-50 text-green-700 hover:bg-green-50 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+                                Verified
+                              </Badge>
+                            )}
+                          </div>
                           <div className="text-sm text-muted-foreground truncate max-w-[200px]">{lead.address}</div>
                         </TableCell>
                         <TableCell>

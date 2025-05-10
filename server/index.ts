@@ -14,6 +14,7 @@ import { registerRoutes } from './routes';
 import { registerBulkLeadRoutes } from './routes/bulk-leads';
 import { registerDirectDownloadRoutes } from './routes/direct-download';
 import { registerB2CRoutes } from './routes/b2c-routes';
+import { registerVerificationRoutes } from './routes/verification-routes';
 import { GooglePlacesService } from './api/google-places-service';
 
 // Load environment variables
@@ -121,6 +122,9 @@ async function startServer(app: Express) {
     
     // Register B2C lead generation routes
     registerB2CRoutes(app);
+    
+    // Register verification routes
+    registerVerificationRoutes(app);
     
     // Clean up routes to avoid conflicts
     if (app._router && app._router.stack) {
