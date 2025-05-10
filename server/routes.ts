@@ -292,16 +292,9 @@ async function simulateScraping(companyName: string, industry?: string, location
   // For simulation, we'll generate a larger set of company data with more contacts
   const companyData = generateIndustrySpecificData(industryCategory, companyName, formattedLocation);
   
-  // Vivid Shines needs 500 real estate contacts - increase the number significantly for real estate
-  let contactCount = 15 + Math.floor(Math.random() * 15); // Default: 15-30 contacts
-  
-  // For real estate industry specifically, generate 500 contacts
-  if (industryCategory === 'real_estate') {
-    contactCount = 500; // Generate 500 real estate contacts
-    console.log(`Generating ${contactCount} real estate contacts for cleaning service prospecting`);
-  }
-  
-  // Generate the additional contacts
+  // BULK DATA ENHANCEMENT: Generate a much larger set of contacts (15-30 contacts instead of 3-5)
+  // In production, this would be from multiple data sources aggregated in parallel
+  const contactCount = 15 + Math.floor(Math.random() * 15); // 15-30 contacts
   const additionalContacts = generateMoreContacts(industryCategory, companyName, contactCount);
   
   // Aggregate, deduplicate, and enrich contact data
@@ -417,23 +410,23 @@ function generateIndustrySpecificData(category: string, companyName: string, loc
       return {
         name: companyName || "Marketing Agency",
         industry: "Marketing",
-        subIndustry: "Digital Marketing",
+        subIndustry: industry || "Digital Marketing",
         location: location || "Los Angeles, CA",
         size: "11-50",
         address: generateRandomAddress(location),
         founded: 2005 + Math.floor(Math.random() * 15),
-        contacts: generateIndustryContacts(3, companyName || "MarketingCorp", "marketing")
+        contacts: generateMarketingContacts(3, companyName)
       };
     case 'retail_manufacturing':
       return {
         name: companyName || "Retail & Manufacturing",
         industry: "Retail/Manufacturing",
-        subIndustry: "Consumer Products",
+        subIndustry: industry || "Consumer Products",
         location: location || "Chicago, IL",
         size: "201-500",
         address: generateRandomAddress(location),
         founded: 1960 + Math.floor(Math.random() * 50),
-        contacts: generateIndustryContacts(3, companyName || "RetailCorp", "retail")
+        contacts: generateRetailManufacturingContacts(3, companyName)
       };
     case 'general':
     default:
@@ -611,155 +604,61 @@ function generateRandomContacts(count: number, companyName: string): any[] {
 function generateRealEstateContacts(count: number, companyName: string): any[] {
   const contacts = [];
   
-  // Expanded first names list to support large contact generation
+  // First names
   const firstNames = ["John", "Jane", "Michael", "Sarah", "David", "Emily", "Robert", "Lisa", "James", "Jennifer", 
-                      "Richard", "Patricia", "Thomas", "Jessica", "William", "Elizabeth", "Daniel", "Karen",
-                      "Matthew", "Mary", "Anthony", "Amanda", "Jason", "Ashley", "Kevin", "Nancy", "Christopher", "Laura",
-                      "Steven", "Rebecca", "Edward", "Nicole", "Ryan", "Stephanie", "Timothy", "Kathleen", "Jeffrey", "Emma",
-                      "Paul", "Catherine", "Andrew", "Olivia", "Mark", "Sophia", "George", "Ava", "Peter", "Mia", 
-                      "Joseph", "Charlotte", "Donald", "Isabella", "Ronald", "Madison", "Charles", "Victoria", "Frank",
-                      "Joshua", "Susan", "Eric", "Samantha", "Scott", "Rachel", "Raymond", "Christine", "Jack", "Michelle"];
+                      "Richard", "Patricia", "Thomas", "Jessica", "William", "Elizabeth", "Daniel", "Karen"];
   
-  // Expanded last names for more variety
+  // Last names
   const lastNames = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Miller", "Davis", "Garcia", "Wilson", "Martinez",
-                     "Anderson", "Taylor", "Thomas", "Harris", "Moore", "Clark", "Lewis", "Young", "Walker", "Allen",
-                     "King", "Wright", "Scott", "Green", "Baker", "Adams", "Nelson", "Hill", "Ramirez", "Campbell",
-                     "Mitchell", "Roberts", "Carter", "Phillips", "Evans", "Turner", "Torres", "Parker", "Collins", "Edwards",
-                     "Stewart", "Flores", "Morris", "Nguyen", "Murphy", "Rivera", "Cook", "Rogers", "Morgan", "Peterson",
-                     "Cooper", "Reed", "Bailey", "Bell", "Gomez", "Kelly", "Howard", "Ward", "Cox", "Diaz", "Richardson",
-                     "Wood", "Watson", "Brooks", "Bennett", "Gray", "James", "Reyes", "Cruz", "Hughes", "Price", "Myers"];
+                     "Anderson", "Taylor", "Thomas", "Harris", "Moore", "Clark", "Lewis", "Young"];
   
-  // Expanded real estate positions focused on those who would make cleaning service decisions
+  // Real estate specific positions with different levels of seniority
   const realEstatePositions = [
-    // Key decision makers (facility management related)
-    "Facility Manager", "Property Manager", "Operations Director", "Building Manager", "Maintenance Supervisor",
-    "Chief Operations Officer", "Director of Property Management", "VP of Facilities", "Operations Manager", 
-    "Site Manager", "Facilities Coordinator", "Building Superintendent", "Asset Manager", "Portfolio Manager",
-    
-    // Executive decision makers
-    "Broker/Owner", "Managing Broker", "Principal Broker", "Broker of Record", "CEO", "President",
-    "VP of Operations", "Chief Property Officer", "Managing Director", "VP of Real Estate", 
-    
-    // Other real estate positions
+    "Broker/Owner", "Managing Broker", "Principal Broker", "Broker of Record", "CEO",
     "VP of Sales", "VP of Property Management", "Director of Acquisitions", "Director of Leasing",
     "Senior Real Estate Agent", "Real Estate Agent", "Realtor", "Commercial Broker",
-    "Leasing Consultant", "Mortgage Broker", "Transaction Coordinator",
+    "Property Manager", "Leasing Consultant", "Mortgage Broker", "Transaction Coordinator",
     "Real Estate Developer", "Real Estate Investor", "Chief Investment Officer",
     "Marketing Director", "Business Development Manager"
   ];
   
-  // Domain for email - create realistic company domains
-  const domainBase = companyName ? companyName.toLowerCase().replace(/[^a-z0-9]/g, "") : "realestate";
-  const domainExtensions = [".com", ".net", ".co", ".realty", ".properties"];
-  const domain = domainBase + domainExtensions[Math.floor(Math.random() * domainExtensions.length)];
+  // Domain for email
+  const domain = companyName.toLowerCase().replace(/[^a-z0-9]/g, "") + ".com";
   
-  // Ensure a proper balance of decision makers relevant to cleaning service contracts
-  const decisionMakerPercentage = 0.35; // 35% of contacts will be decision makers
-  const targetDecisionMakers = Math.ceil(count * decisionMakerPercentage);
-  let decisionMakersAdded = 0;
+  // Ensure at least one decision maker
+  let hasDecisionMaker = false;
   
   for (let i = 0; i < count; i++) {
     const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
     const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
     
-    // Strategically add facility-related decision makers to help Vivid Shines target the right people
+    // For the first contact or with 30% probability, make it a senior position
     let position;
-    const remainingToAdd = targetDecisionMakers - decisionMakersAdded;
-    const remainingContacts = count - i;
-    
-    // Ensure we meet our target decision maker percentage
-    if (decisionMakersAdded < targetDecisionMakers && (i < 5 || Math.random() < (remainingToAdd / remainingContacts))) {
-      // Choose from facility management positions (first 15 in the array)
-      position = realEstatePositions[Math.floor(Math.random() * 15)];
-      decisionMakersAdded++;
+    if (i === 0 || Math.random() < 0.3) {
+      position = realEstatePositions[Math.floor(Math.random() * 6)]; // Senior positions
+      hasDecisionMaker = true;
     } else {
-      // Choose from any position
       position = realEstatePositions[Math.floor(Math.random() * realEstatePositions.length)];
     }
     
-    // Generate realistic email with multiple formats
-    let email;
-    const emailFormat = Math.floor(Math.random() * 5);
+    // Generate email
+    const email = `${firstName.toLowerCase()[0]}${lastName.toLowerCase()}@${domain}`;
     
-    switch (emailFormat) {
-      case 0:
-        email = `${firstName.toLowerCase()}@${domain}`; // john@domain.com
-        break;
-      case 1:
-        email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}@${domain}`; // john.smith@domain.com
-        break;
-      case 2:
-        email = `${firstName.toLowerCase()[0]}${lastName.toLowerCase()}@${domain}`; // jsmith@domain.com
-        break;
-      case 3:
-        email = `${lastName.toLowerCase()}.${firstName.toLowerCase()}@${domain}`; // smith.john@domain.com
-        break;
-      case 4:
-        email = `${firstName.toLowerCase()}${lastName.toLowerCase()[0]}@${domain}`; // johnm@domain.com
-        break;
-    }
-    
-    // Generate direct phone numbers with area codes matching location
-    // Real estate companies often have local area codes
-    const areaCodes = {
-      "New York": ["212", "646", "917"],
-      "Los Angeles": ["213", "310", "323", "424"],
-      "Chicago": ["312", "773"],
-      "San Francisco": ["415", "628"],
-      "Boston": ["617", "857"],
-      "Seattle": ["206", "425"],
-      "Miami": ["305", "786"],
-      "Denver": ["303", "720"],
-      "Atlanta": ["404", "470", "678"],
-      "Dallas": ["214", "469", "972"],
-      "Houston": ["281", "713", "832"],
-      "Philadelphia": ["215", "267"]
-    };
-    
-    // Choose a relevant area code or fallback to generic ones
-    let areaCode;
-    if (companyName && companyName.includes("New York")) {
-      areaCode = areaCodes["New York"][Math.floor(Math.random() * areaCodes["New York"].length)];
-    } else if (companyName && companyName.includes("Los Angeles")) {
-      areaCode = areaCodes["Los Angeles"][Math.floor(Math.random() * areaCodes["Los Angeles"].length)];
-    } else if (companyName && companyName.includes("Chicago")) {
-      areaCode = areaCodes["Chicago"][Math.floor(Math.random() * areaCodes["Chicago"].length)];
-    } else {
-      // Generic area codes from major cities
-      const allAreaCodes = [].concat(...Object.values(areaCodes));
-      areaCode = allAreaCodes[Math.floor(Math.random() * allAreaCodes.length)];
-    }
-    
-    // Create direct line format with extension
-    const phone = `(${areaCode}) ${Math.floor(200 + Math.random() * 800)}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const extension = Math.floor(Math.random() * 5) === 0 ? ` x${Math.floor(100 + Math.random() * 900)}` : '';
-    
-    // Real estate specific notes relevant to cleaning service
-    const buildingNotes = [
-      "Manages multiple properties", 
-      "Handles commercial leasing", 
-      "Oversees property maintenance",
-      "Responsible for tenant relations",
-      "Manages cleaning contracts",
-      "Handles facility maintenance",
-      "Oversees building operations",
-      "Decision maker for vendor selection"
-    ];
-    
-    // Only add notes for decision makers
-    const notes = position.includes("Manager") || position.includes("Director") || position.includes("VP") || 
-                  position.includes("Chief") || position.includes("President") || position.includes("Owner") ?
-                  buildingNotes[Math.floor(Math.random() * buildingNotes.length)] : "";
+    // Generate direct phone
+    const areaCode = ["415", "212", "512", "312", "206", "617"][Math.floor(Math.random() * 6)];
+    const phone = `(${areaCode}) 555-${Math.floor(1000 + Math.random() * 9000)}`;
     
     contacts.push({
       name: `${firstName} ${lastName}`,
       position,
       email,
-      phone: phone + extension,
-      decisionMaker: decisionMakersAdded > 0 && position.includes("Manager") || position.includes("Director") || 
-                    position.includes("VP") || position.includes("Chief") || position.includes("President"),
-      notes: notes
+      phone,
     });
+  }
+  
+  // If no decision makers were created, ensure at least one
+  if (!hasDecisionMaker && contacts.length > 0) {
+    contacts[0].position = realEstatePositions[Math.floor(Math.random() * 5)];
   }
   
   return contacts;
