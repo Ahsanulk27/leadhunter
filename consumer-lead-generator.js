@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
+import fetch from 'node-fetch';
 
 // Get the directory name
 const __filename = fileURLToPath(import.meta.url);
@@ -542,6 +543,7 @@ function saveLeadsToJson(leads, location) {
   const filename = `${location.replace(/,?\s+/g, '_').toLowerCase()}_consumer_leads.json`;
   const filepath = path.join(OUTPUT_DIR, filename);
   
+  // Write to file
   fs.writeFileSync(filepath, JSON.stringify(leads, null, 2));
   console.log(`Saved ${leads.length} leads to ${filepath}`);
   
@@ -580,6 +582,42 @@ function runLeadGeneration() {
   leads.forEach(lead => {
     jobTitleCounts[lead.jobTitle] = (jobTitleCounts[lead.jobTitle] || 0) + 1;
   });
+  
+  // Print job title distribution
+  console.log('\nJob Title Distribution:');
+  const sortedTitles = Object.entries(jobTitleCounts).sort((a, b) => b[1] - a[1]);
+  sortedTitles.forEach(([title, count]) => {
+    console.log(`  ${title}: ${count} leads (${Math.round(count/leads.length*100)}%)`);
+  });
+  
+  // Print a sample of the data
+  console.log('\nSample Results (3 random leads):');
+  
+  const sampleIndices = [];
+  while (sampleIndices.length < 3) {
+    const idx = Math.floor(Math.random() * leads.length);
+    if (!sampleIndices.includes(idx)) {
+      sampleIndices.push(idx);
+    }
+  }
+  
+  sampleIndices.forEach(idx => {
+    const lead = leads[idx];
+    console.log(`\n  Lead #${idx+1}:`);
+    console.log(`  Name: ${lead.name} (${lead.jobTitle})`);
+    console.log(`  Contact: ${lead.phoneNumber} / ${lead.email}`);
+    console.log(`  Address: ${lead.address}`);
+    console.log(`  Property: ${lead.propertyType}, ${lead.propertySize}`);
+    console.log(`  Need: ${lead.cleaningNeed}`);
+    console.log(`  Budget: ${lead.budget}`);
+    console.log(`  Inquiry Date: ${lead.inquiryDate}`);
+    console.log(`  Lead Score: ${lead.leadScore} (${lead.isHotLead ? 'Hot Lead' : 'Normal'})`);
+    console.log(`  Notes: ${lead.notes}`);
+  });
+  
+  console.log('\nConsumer leads generation completed successfully!');
+  console.log(`CSV file saved to: ${csvPath}`);
+  console.log(`JSON file saved to: ${jsonPath}`);
 }
 
 /**
@@ -671,43 +709,6 @@ async function checkValidationServer() {
     return false;
   }
 }
-  sortedTitles.forEach(([title, count]) => {
-    console.log(`  ${title}: ${count} leads (${Math.round(count/leads.length*100)}%)`);
-  });
-  
-  // Print a sample of the data
-  console.log('\nSample Results (3 random leads):');
-  
-  const sampleIndices = [];
-  while (sampleIndices.length < 3) {
-    const idx = Math.floor(Math.random() * leads.length);
-    if (!sampleIndices.includes(idx)) {
-      sampleIndices.push(idx);
-    }
-  }
-  
-  sampleIndices.forEach(idx => {
-    const lead = leads[idx];
-    console.log(`\n[${idx + 1}] ${lead.name} - ${lead.jobTitle} ${lead.isHotLead ? '🔥 HOT LEAD' : 'Regular Lead'}`);
-    console.log(`    Phone: ${lead.phoneNumber}`);
-    console.log(`    Email: ${lead.email}`);
-    console.log(`    Address: ${lead.address}`);
-    console.log(`    Property: ${lead.propertyType} (${lead.propertySize})`);
-    console.log(`    Need: ${lead.cleaningNeed}`);
-    console.log(`    Budget: ${lead.budget}`);
-    console.log(`    Inquiry Date: ${lead.inquiryDate}`);
-    console.log(`    Lead Score: ${lead.leadScore}/100`);
-    console.log(`    Notes: ${lead.notes}`);
-  });
-  
-  console.log('\nLead Generation Summary:');
-  console.log(`Total Leads: ${leads.length}`);
-  console.log(`Hot Leads: ${leads.filter(l => l.isHotLead).length}`);
-  console.log(`Regular Leads: ${leads.filter(l => !l.isHotLead).length}`);
-  console.log(`Unique Job Titles: ${Object.keys(jobTitleCounts).length}`);
-  console.log(`CSV saved to: ${csvPath}`);
-  console.log(`JSON saved to: ${jsonPath}`);
-}
 
-// Run the lead generation
+// Run the generator
 runLeadGeneration();

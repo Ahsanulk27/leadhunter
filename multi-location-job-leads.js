@@ -1,12 +1,14 @@
 /**
  * Enhanced Multi-Location Consumer Lead Generator with Accurate Job Titles
  * Generates consumer leads across multiple locations with realistic job titles
+ * Includes data validation features for enhanced data quality
  */
 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
+import fetch from 'node-fetch';
 
 // Get the directory name
 const __filename = fileURLToPath(import.meta.url);
@@ -638,6 +640,9 @@ async function runMultiLocationLeadGeneration() {
     // Generate the leads
     const leads = generateConsumerLeads(MAX_LEADS_PER_LOCATION, location);
     
+    // Validate leads if validation server is running
+    await validateLeads(leads, location);
+    
     // Save to CSV and JSON
     const csvPath = saveLeadsToCsv(leads, location);
     const jsonPath = saveLeadsToJson(leads, location);
@@ -687,4 +692,94 @@ async function runMultiLocationLeadGeneration() {
 }
 
 // Run the multi-location lead generation
+/**
+ * Validate leads using the validation API
+ */
+async function validateLeads(leads, location) {
+  try {
+    console.log(`Attempting to validate ${leads.length} leads for ${location}...`);
+    
+    // Check if validation server is running
+    const isServerRunning = await checkValidationServer();
+    
+    if (!isServerRunning) {
+      console.log('Validation server not running. Skipping validation.');
+      return;
+    }
+    
+    // Prepare leads for validation
+    const leadsForValidation = leads.map(lead => ({
+      id: lead.id,
+      name: lead.name,
+      phoneNumber: lead.phoneNumber,
+      email: lead.email,
+      address: lead.address,
+      jobTitle: lead.jobTitle
+    }));
+    
+    // Create directory for validation results if it doesn't exist
+    const validationDir = 'validation_results';
+    if (!fs.existsSync(validationDir)) {
+      fs.mkdirSync(validationDir, { recursive: true });
+    }
+    
+    // Call validation API
+    console.log('Calling validation API...');
+    try {
+      const response = await fetch('http://localhost:5000/api/validate/batch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ leads: leadsForValidation })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Validation API error: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log(`Validation completed for ${location}`);
+        console.log(`Summary: ${result.summary.valid} valid, ${result.summary.suspicious} suspicious, ${result.summary.invalid} invalid leads`);
+        
+        // Save validation results
+        const filename = location.replace(/,?\s+/g, '_').toLowerCase();
+        fs.writeFileSync(
+          `${validationDir}/${filename}_validation.json`, 
+          JSON.stringify(result, null, 2)
+        );
+        
+        console.log(`Validation results saved to ${validationDir}/${filename}_validation.json`);
+      } else {
+        console.error(`Validation failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error calling validation API:', error.message);
+    }
+  } catch (error) {
+    console.error('Error in validation process:', error);
+  }
+}
+
+/**
+ * Check if validation server is running
+ */
+async function checkValidationServer() {
+  try {
+    const response = await fetch('http://localhost:5000/api/validate/settings', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    return response.ok;
+  } catch (error) {
+    console.log('Validation server check failed:', error.message);
+    return false;
+  }
+}
+
 runMultiLocationLeadGeneration();
