@@ -141,9 +141,10 @@ export class SelfTestService {
         // Skip the diagnostic information step as it's less important than fixing
         // the actual business scraping functionality
         
-        // Just log the failure
-        console.log(`⚠️ Diagnostic information capture skipped for ${testCase.name}`);
-        } catch (error) {
+        try {
+          // Just log the failure
+          console.log(`⚠️ Diagnostic information capture skipped for ${testCase.name}`);
+        } catch (error: unknown) {
           console.error('Self-test diagnostic error:', error);
         }
         
