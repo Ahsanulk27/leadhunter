@@ -372,7 +372,7 @@ function getIndustryCategory(industry?: string): string {
 function generateIndustrySpecificData(category: string, companyName: string, location?: string): any {
   switch (category) {
     case 'real_estate':
-      return generateRealEstateCompanyData(companyName, location);
+      return generateBusinessCompanyData(companyName, location);
     case 'technology':
       return {
         name: companyName || "Tech Company",
@@ -472,33 +472,34 @@ function generateRandomIndustry(): string {
   return industries[Math.floor(Math.random() * industries.length)];
 }
 
-function generateRealEstateCompanyData(companyName: string, location?: string): any {
-  // Real estate specific data
-  const realEstateTypes = [
-    "Residential Real Estate", "Commercial Real Estate", "Property Management", 
-    "Real Estate Development", "Luxury Real Estate", "Real Estate Investment", 
-    "Property Brokerage"
+function generateBusinessCompanyData(companyName: string, location?: string): any {
+  // Business data for any industry, not just real estate
+  const businessIndustries = [
+    "Technology", "Professional Services", "Manufacturing", "Healthcare", 
+    "Financial Services", "Education", "Retail", "Hospitality", 
+    "Transportation", "Construction", "Energy", "Media"
   ];
   
-  const propertyTypes = [
-    "Single Family Homes", "Condominiums", "Commercial Properties", 
-    "Office Buildings", "Retail Spaces", "Industrial Properties", 
-    "Multi-Family Units", "Luxury Estates"
+  const businessSpecialties = [
+    "Digital Transformation", "Operational Excellence", "Customer Experience",
+    "Business Process Optimization", "Innovation", "Sustainability",
+    "Supply Chain Management", "Quality Assurance", "Project Management",
+    "Risk Management", "Business Analytics", "Strategic Planning"
   ];
   
-  const realEstateCompanySize = ["5-25", "26-50", "51-100", "101-250", "251-500"];
+  const companySize = ["5-25", "26-50", "51-100", "101-250", "251-500", "501-1000", "1000+"];
   
-  // Generate company data
+  // Generate general company data
   return {
     name: companyName,
-    industry: "Real Estate",
-    subIndustry: realEstateTypes[Math.floor(Math.random() * realEstateTypes.length)],
-    specialties: propertyTypes.slice(0, 2 + Math.floor(Math.random() * 3)),
+    industry: businessIndustries[Math.floor(Math.random() * businessIndustries.length)],
+    subIndustry: businessIndustries[Math.floor(Math.random() * businessIndustries.length)],
+    specialties: businessSpecialties.slice(0, 2 + Math.floor(Math.random() * 3)),
     location: location || generateRandomLocation(),
-    size: realEstateCompanySize[Math.floor(Math.random() * realEstateCompanySize.length)],
+    size: companySize[Math.floor(Math.random() * companySize.length)],
     address: generateRandomAddress(location),
     yearEstablished: 1970 + Math.floor(Math.random() * 50),
-    contacts: generateRealEstateContacts(3 + Math.floor(Math.random() * 3), companyName)
+    contacts: generateBusinessContacts(3 + Math.floor(Math.random() * 3), companyName)
   };
 }
 
