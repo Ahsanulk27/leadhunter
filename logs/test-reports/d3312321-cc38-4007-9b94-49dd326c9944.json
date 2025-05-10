@@ -1,0 +1,27 @@
+{
+  "id": "d3312321-cc38-4007-9b94-49dd326c9944",
+  "timestamp": "2025-05-10T10:07:30.817Z",
+  "total_tests": 2,
+  "passed_tests": 2,
+  "failed_tests": 0,
+  "results": [
+    {
+      "id": "08f10c3e-be4a-4e3e-88c3-1cf33de9d4ed",
+      "test_case_id": "test-case-1",
+      "name": "General Business Test",
+      "passed": true,
+      "timestamp": "2025-05-10T10:07:30.851Z",
+      "execution_time_ms": 34,
+      "results_count": 10
+    },
+    {
+      "id": "f4796adc-655f-418d-a5b9-b5c48d4bf9d4",
+      "test_case_id": "test-case-2",
+      "name": "Property Management Test",
+      "passed": true,
+      "timestamp": "2025-05-10T10:07:30.853Z",
+      "execution_time_ms": 0,
+      "results_count": 10
+    }
+  ]
+}

@@ -10,6 +10,7 @@ import { runStartupOperations, schedulePeriodicHealthChecks } from './startup';
 import { SearchParams } from './models/business-data';
 import { setupVite, serveStatic, log } from './vite';
 import http from 'http';
+import { registerRoutes } from './routes';
 
 // Load environment variables
 dotenv.config();
@@ -24,13 +25,7 @@ app.use(express.json());
 // Use URL-encoded bodies
 app.use(express.urlencoded({ extended: true }));
 
-// Unlocked Root Route - No Upgrade Required Blocking
-app.get('/', (req, res) => {
-  res.send(`
-    <h1>NexLead Hunter is Live</h1>
-    <p>Try the scraping API at <code>/scrape?query=Plumber&location=New York</code></p>
-  `);
-});
+// Root route will now be handled by the React frontend after Vite setup
 
 // API Health Check
 app.get('/api/health', (req: Request, res: Response) => {
@@ -107,6 +102,9 @@ async function startServer(app: Express) {
     
     // Create HTTP server
     const server = http.createServer(app);
+    
+    // Register API routes
+    await registerRoutes(app);
     
     // Setup Vite development environment
     if (process.env.NODE_ENV === 'development') {
