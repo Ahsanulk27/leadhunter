@@ -7,6 +7,7 @@ import NotFound from "@/pages/not-found";
 import LeadFinder from "@/pages/lead-finder";
 import MyLeads from "@/pages/my-leads";
 import SearchHistory from "@/pages/search-history";
+import SettingsPage from "@/pages/settings";
 import Layout from "@/components/layout";
 
 function Router() {
@@ -26,14 +27,7 @@ function Router() {
             </div>
           </div>
         </Route>
-        <Route path="/settings">
-          <div className="min-h-screen flex items-center justify-center">
-            <div className="text-center">
-              <h1 className="text-2xl font-bold">Settings</h1>
-              <p className="mt-2 text-gray-600">This feature is coming soon.</p>
-            </div>
-          </div>
-        </Route>
+        <Route path="/settings" component={SettingsPage} />
         
         {/* Fallback to 404 */}
         <Route component={NotFound} />

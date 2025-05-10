@@ -267,6 +267,11 @@ export default function LeadFinder() {
           })()
         ) : null}
         
+        {/* API Status Dashboard */}
+        <div className="mt-6">
+          <ApiStatusDashboard />
+        </div>
+        
         {savedLeads && Array.isArray(savedLeads) && savedLeads.length > 0 && (
           <SavedLeads leads={savedLeads} isLoading={savedLeadsLoading} />
         )}

@@ -137,8 +137,7 @@ export default function ApiStatusDashboard() {
             </div>
             <Progress
               value={placesApiStatus.quota_used_percent}
-              className="h-2"
-              indicatorClassName={quotaColor}
+              className={`h-2 ${quotaColor}`}
             />
           </div>
           
@@ -158,7 +157,7 @@ export default function ApiStatusDashboard() {
           </div>
           
           {placesApiStatus.quota_used_percent > 80 && (
-            <Alert variant="warning" className="mt-4">
+            <Alert className="mt-4 bg-yellow-50 border-yellow-200 text-yellow-800">
               <AlertCircle className="h-4 w-4" />
               <AlertTitle>High API Usage</AlertTitle>
               <AlertDescription>
