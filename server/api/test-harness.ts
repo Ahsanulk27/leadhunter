@@ -70,10 +70,11 @@ export class TestHarness {
         timestamp: new Date().toISOString(),
         dependency_status: dependencyStatus,
         puppeteer_status: puppeteerStatus,
-        test_results: selfTestService.getTestReport(),
+        test_results: simplifiedSelfTestService.getTestReport(),
         diagnostics: this.analyzeDiagnostics(testResults),
-        fixes_applied: [],
-        logs_location: logFile
+        fixes_applied: [] as string[],
+        logs_location: logFile,
+        retest_results: null
       };
       
       // 4. Try to automatically fix any issues
@@ -86,8 +87,8 @@ export class TestHarness {
         // Run tests again to see if fixes worked
         if (fixes.length > 0) {
           logStream.write(`${timestamp} - Re-running tests after applying fixes\n`);
-          const retestResults = await selfTestService.runAllTests();
-          report.retest_results = selfTestService.getTestReport();
+          const retestResults = await simplifiedSelfTestService.runAllTests();
+          report.retest_results = simplifiedSelfTestService.getTestReport();
           this.lastTestResults = retestResults;
           
           logStream.write(`${timestamp} - Retest results: ${JSON.stringify(report.retest_results)}\n`);

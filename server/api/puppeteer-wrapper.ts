@@ -1,357 +1,441 @@
-import * as puppeteer from 'puppeteer';
-import { getRandomUserAgent, getRandomDelay } from './scraper-utils';
-
 /**
- * A wrapper around Puppeteer with additional utilities for scraping
- * Provides anti-ban features and helper methods
+ * Puppeteer wrapper service to handle browser management and anti-detection techniques
+ * This centralizes all Puppeteer usage and provides utilities for managing browser instances
  */
+
+import * as puppeteer from 'puppeteer';
+import * as fs from 'fs';
+import * as path from 'path';
+import { randomBytes } from 'crypto';
+
+interface BrowserInstance {
+  browser: puppeteer.Browser;
+  pages: Set<puppeteer.Page>;
+  lastUsed: Date;
+  userAgent?: string;
+  id: string;
+}
+
 export class PuppeteerWrapper {
+  private browsers: Map<string, BrowserInstance> = new Map();
+  private maxBrowsers: number = 3;
+  private browserLifetime: number = 60 * 60 * 1000; // 1 hour in milliseconds
+  private logsDir = path.join(process.cwd(), 'logs');
+  
+  constructor() {
+    // Ensure logs directory exists
+    if (!fs.existsSync(this.logsDir)) {
+      fs.mkdirSync(this.logsDir, { recursive: true });
+    }
+    
+    // Set up a cleanup interval to manage browser instances
+    setInterval(() => this.cleanupBrowsers(), 5 * 60 * 1000); // Check every 5 minutes
+  }
+  
   /**
-   * Improved method to check if the page contains a CAPTCHA
-   * This analyzes both DOM elements and page content
+   * Create a new browser instance
    */
-  private async checkForCaptcha(page: puppeteer.Page): Promise<boolean> {
+  async createBrowser(userAgent?: string): Promise<BrowserInstance> {
     try {
-      console.log(`📍 PuppeteerWrapper: Checking for CAPTCHA presence`);
-      
-      // More comprehensive list of captcha selectors
-      const captchaSelectors = [
-        'div[data-captcha]',
-        'div.g-recaptcha',
-        'iframe[src*="recaptcha"]',
-        'iframe[src*="captcha"]',
-        'div.rc-anchor',
-        'form#captcha',
-        'img[src*="captcha"]',
-        'form[action*="captcha"]',
-        'input[name*="captcha"]',
-        'div.captcha',
-        '#captcha',
-        '.recaptcha'
-      ];
-      
-      for (const selector of captchaSelectors) {
-        try {
-          const foundCaptcha = await page.$(selector);
-          if (foundCaptcha) {
-            console.log(`Found CAPTCHA with selector: ${selector}`);
-            return true;
-          }
-        } catch (e) {
-          // Ignore errors for individual selectors
-        }
+      // Clean up old browsers if we're at capacity
+      if (this.browsers.size >= this.maxBrowsers) {
+        this.cleanupOldestBrowser();
       }
       
-      // Check page title and content for CAPTCHA-related terms
-      const pageTitle = await page.title();
-      const bodyContent = await page.evaluate(() => document.body.innerText);
+      // Launch browser with stealth settings
+      const browser = await puppeteer.launch({
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-infobars',
+          '--window-position=0,0',
+          '--ignore-certificate-errors',
+          '--ignore-certificate-errors-spki-list',
+          '--disable-extensions',
+          '--disable-dev-shm-usage'
+        ],
+        defaultViewport: {
+          width: 1366,
+          height: 768
+        },
+        headless: true
+      });
       
-      const captchaTerms = [
-        'captcha', 
-        'robot', 
-        'verify', 
-        'human', 
-        'suspicious', 
-        'security check',
-        'prove you\'re not',
-        'unusual traffic',
-        'automated access',
-        'blocked',
-        'challenge'
-      ];
+      // Track the browser instance
+      const browserId = `browser-${Date.now()}-${randomBytes(4).toString('hex')}`;
+      const instance: BrowserInstance = {
+        browser,
+        pages: new Set(),
+        lastUsed: new Date(),
+        userAgent,
+        id: browserId
+      };
       
-      for (const term of captchaTerms) {
+      this.browsers.set(browserId, instance);
+      
+      console.log(`🔧 PuppeteerWrapper: Created new browser instance ${browserId}`);
+      
+      return instance;
+    } catch (error) {
+      console.error('❌ Error creating browser:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Get an existing browser or create a new one
+   */
+  async getBrowser(userAgent?: string): Promise<BrowserInstance> {
+    let bestMatch: BrowserInstance | null = null;
+    
+    // Try to find an existing browser with matching userAgent
+    if (userAgent) {
+      for (const instance of this.browsers.values()) {
+        if (instance.userAgent === userAgent) {
+          bestMatch = instance;
+          break;
+        }
+      }
+    }
+    
+    // If no matching browser, choose any available browser
+    if (!bestMatch && this.browsers.size > 0) {
+      bestMatch = Array.from(this.browsers.values())[0];
+    }
+    
+    // If we found a suitable browser, update its last used time
+    if (bestMatch) {
+      bestMatch.lastUsed = new Date();
+      return bestMatch;
+    }
+    
+    // Otherwise create a new browser
+    return this.createBrowser(userAgent);
+  }
+  
+  /**
+   * Create a new page in a browser with specified user agent
+   */
+  async newPage(userAgent?: string): Promise<puppeteer.Page> {
+    try {
+      const instance = await this.getBrowser(userAgent);
+      const page = await instance.browser.newPage();
+      
+      // Set user agent if provided
+      if (userAgent) {
+        await page.setUserAgent(userAgent);
+      }
+      
+      // Apply anti-detection measures
+      await this.applyStealthMode(page);
+      
+      // Track the page in the browser instance
+      instance.pages.add(page);
+      
+      // Set up cleanup when page closes
+      page.once('close', () => {
+        instance.pages.delete(page);
+      });
+      
+      return page;
+    } catch (error) {
+      console.error('❌ Error creating page:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Apply stealth mode settings to avoid detection
+   */
+  private async applyStealthMode(page: puppeteer.Page): Promise<void> {
+    // Randomize WebGL details to avoid fingerprinting
+    await page.evaluateOnNewDocument(() => {
+      // Override WebGL fingerprinting
+      const getParameterProto = WebGLRenderingContext.prototype.getParameter;
+      WebGLRenderingContext.prototype.getParameter = function(parameter) {
+        // UNMASKED_VENDOR_WEBGL
+        if (parameter === 37445) {
+          return 'Intel Open Source Technology Center';
+        }
+        // UNMASKED_RENDERER_WEBGL
+        if (parameter === 37446) {
+          return 'Mesa DRI Intel(R) Iris(TM) Plus Graphics (ICL GT2)';
+        }
+        return getParameterProto.call(this, parameter);
+      };
+      
+      // Override navigator properties
+      const createGetter = (prop: string, value: any) => {
+        Object.defineProperty(navigator, prop, {
+          get: () => value
+        });
+      };
+      
+      // Modify navigator properties to appear more like a regular browser
+      createGetter('webdriver', false);
+      createGetter('plugins', {
+        length: 3,
+        refresh: () => {},
+        item: (i: number) => ({name: `Plugin ${i}`, filename: `plugin-${i}.dll`})
+      });
+      
+      // Try to prevent detection of automation
+      createGetter('languages', ['en-US', 'en']);
+      
+      // Override the permissions API
+      const permissionsProto = Permissions.prototype;
+      const oldQuery = permissionsProto.query;
+      permissionsProto.query = function(parameters) {
+        return Promise.resolve({state: 'prompt', onchange: null});
+      };
+    });
+    
+    // Set default browser viewport
+    await page.setViewport({
+      width: 1366,
+      height: 768,
+      deviceScaleFactor: 1,
+    });
+    
+    // Set tracking/privacy settings
+    await page.evaluateOnNewDocument(() => {
+      // Set browser details that might be used for fingerprinting
+      Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
+      Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
+      Object.defineProperty(navigator, 'connection', { 
+        get: () => ({
+          effectiveType: '4g',
+          rtt: 50,
+          downlink: 10.0,
+          saveData: false
+        })
+      });
+    });
+  }
+  
+  /**
+   * Take a screenshot and save it to the logs directory
+   */
+  async saveScreenshot(page: puppeteer.Page, name: string): Promise<string> {
+    const screenshotDir = path.join(this.logsDir, 'screenshots');
+    if (!fs.existsSync(screenshotDir)) {
+      fs.mkdirSync(screenshotDir, { recursive: true });
+    }
+    
+    const filename = `${name}-${Date.now()}.png`;
+    const filePath = path.join(screenshotDir, filename);
+    
+    await page.screenshot({ path: filePath, fullPage: true });
+    return filePath;
+  }
+  
+  /**
+   * Close a specific browser instance
+   */
+  async closeBrowser(browserId: string): Promise<void> {
+    const instance = this.browsers.get(browserId);
+    if (instance) {
+      try {
+        await instance.browser.close();
+        this.browsers.delete(browserId);
+        console.log(`🔧 PuppeteerWrapper: Closed browser instance ${browserId}`);
+      } catch (error) {
+        console.error(`❌ Error closing browser ${browserId}:`, error);
+        // Clean up the instance even if there was an error
+        this.browsers.delete(browserId);
+      }
+    }
+  }
+  
+  /**
+   * Clean up browser instances that have been running for too long
+   */
+  private async cleanupBrowsers(): Promise<void> {
+    const now = new Date();
+    const browsersToClose: string[] = [];
+    
+    for (const [id, instance] of this.browsers.entries()) {
+      const age = now.getTime() - instance.lastUsed.getTime();
+      if (age > this.browserLifetime) {
+        browsersToClose.push(id);
+      }
+    }
+    
+    for (const id of browsersToClose) {
+      await this.closeBrowser(id);
+    }
+    
+    if (browsersToClose.length > 0) {
+      console.log(`🧹 PuppeteerWrapper: Cleaned up ${browsersToClose.length} browser instances`);
+    }
+  }
+  
+  /**
+   * Close the oldest browser instance to make room for new ones
+   */
+  private async cleanupOldestBrowser(): Promise<void> {
+    if (this.browsers.size === 0) return;
+    
+    let oldestId: string | null = null;
+    let oldestTime = Date.now();
+    
+    for (const [id, instance] of this.browsers.entries()) {
+      if (instance.lastUsed.getTime() < oldestTime) {
+        oldestTime = instance.lastUsed.getTime();
+        oldestId = id;
+      }
+    }
+    
+    if (oldestId) {
+      await this.closeBrowser(oldestId);
+    }
+  }
+  
+  /**
+   * Bypass Cloudflare or other protection systems if detected
+   */
+  async bypassProtection(page: puppeteer.Page, url: string): Promise<boolean> {
+    try {
+      const response = await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+      
+      if (!response) {
+        console.warn('⚠️ No response received from page');
+        return false;
+      }
+      
+      const html = await page.content();
+      
+      // Check if we've hit Cloudflare or similar protection
+      if (
+        html.includes('challenge-running') || 
+        html.includes('challenge-form') || 
+        html.includes('captcha') ||
+        html.includes('cf-browser-verification') ||
+        html.includes('Just a moment') ||
+        html.includes('security check')
+      ) {
+        console.log('🛡️ Protection system detected, attempting to bypass...');
+        
+        // Take a screenshot for debugging
+        await this.saveScreenshot(page, 'protection-detected');
+        
+        // Wait a while to see if the challenge resolves automatically
+        await page.waitForTimeout(5000);
+        
+        // Sometimes Cloudflare auto-resolves after a few seconds
+        const newHtml = await page.content();
         if (
-          pageTitle.toLowerCase().includes(term) ||
-          bodyContent.toLowerCase().includes(term)
+          !newHtml.includes('challenge-running') && 
+          !newHtml.includes('challenge-form') && 
+          !newHtml.includes('captcha') &&
+          !newHtml.includes('cf-browser-verification') &&
+          !newHtml.includes('Just a moment') &&
+          !newHtml.includes('security check')
         ) {
-          console.log(`CAPTCHA detected based on term: ${term}`);
+          console.log('🎉 Protection was bypassed automatically');
           return true;
         }
-      }
-      
-      return false;
-    } catch (error) {
-      console.error('Error checking for CAPTCHA:', error);
-      return false;
-    }
-  }
-  
-  /**
-   * Launch a browser with proper configuration for scraping
-   */
-  async launch(): Promise<puppeteer.Browser> {
-    console.log('🤖 Launching browser with anti-detection measures...');
-    return await puppeteer.launch({
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-web-security',
-        '--disable-features=IsolateOrigins',
-        '--disable-site-isolation-trials',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu',
-        '--lang=en-US,en',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-breakpad',
-        '--disable-component-extensions-with-background-pages',
-        '--disable-features=TranslateUI,BlinkGenPropertyTrees',
-        '--disable-ipc-flooding-protection',
-        '--disable-renderer-backgrounding',
-        '--disable-dev-shm-usage',
-        '--enable-features=NetworkService',
-        '--hide-scrollbars',
-        '--metrics-recording-only',
-        '--mute-audio',
-        '--no-first-run',
-        '--use-gl=swiftshader',
-        '--window-size=1920,1080'
-      ],
-      // @ts-ignore - ignoreHTTPSErrors exists but TypeScript definition may be outdated
-      ignoreHTTPSErrors: true,
-      headless: true
-    });
-  }
-  
-  /**
-   * Create a new page with a random user agent and anti-detection measures
-   */
-  async createPage(browser: puppeteer.Browser): Promise<puppeteer.Page> {
-    const page = await browser.newPage();
-    
-    // Get random user agent
-    const userAgent = getRandomUserAgent();
-    console.log(`🤖 Setting user agent: ${userAgent}`);
-    
-    // Set a random user agent
-    await page.setUserAgent(userAgent);
-    
-    // Set viewport to a common desktop resolution
-    await page.setViewport({ width: 1920, height: 1080 });
-    
-    // Set language to English
-    await page.setExtraHTTPHeaders({
-      'Accept-Language': 'en-US,en;q=0.9'
-    });
-    
-    // Add more sophisticated browser fingerprinting evasion
-    await page.evaluateOnNewDocument(() => {
-      // Overwrite the 'plugins' property to use a custom getter
-      Object.defineProperty(navigator, 'plugins', {
-        get: () => {
-          // Create a plugins array with common plugins
-          return [
-            {
-              0: {
-                type: 'application/pdf',
-                suffixes: 'pdf',
-                description: 'Portable Document Format'
-              },
-              name: 'Chrome PDF Plugin',
-              filename: 'internal-pdf-viewer',
-              description: 'Portable Document Format',
-              length: 1
-            },
-            {
-              0: {
-                type: 'application/x-google-chrome-pdf',
-                suffixes: 'pdf',
-                description: 'Portable Document Format'
-              },
-              name: 'Chrome PDF Viewer',
-              filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai',
-              description: 'Portable Document Format',
-              length: 1
-            }
-          ];
-        }
-      });
-      
-      // Override webdriver property
-      Object.defineProperty(navigator, 'webdriver', {
-        get: () => false
-      });
-      
-      // Override languages property
-      Object.defineProperty(navigator, 'languages', {
-        get: () => ['en-US', 'en']
-      });
-      
-      // Override platform property
-      Object.defineProperty(navigator, 'platform', {
-        get: () => 'Win32'
-      });
-    });
-    
-    // Add a method to wait for a timeout
-    (page as any).waitForTimeout = async (timeout: number) => {
-      return new Promise(resolve => setTimeout(resolve, timeout));
-    };
-    
-    // Add methods to handle captchas if needed - use our improved implementation
-    (page as any).checkForCaptcha = async () => {
-      return await this.checkForCaptcha(page);
-    };
-    
-    // Add a method to log the page HTML for debugging purposes
-    (page as any).logHtml = async () => {
-      const html = await page.content();
-      console.log('📄 PAGE HTML:', html.substring(0, 500) + '... [truncated]');
-      return html;
-    };
-    
-    return page;
-  }
-  
-  /**
-   * Navigate to a URL with randomized timing and ensure complete page load
-   */
-  async navigate(page: puppeteer.Page, url: string, options?: puppeteer.WaitForOptions): Promise<puppeteer.HTTPResponse | null> {
-    try {
-      console.log(`🌐 Navigating to: ${url}`);
-      
-      // Add a small random delay before navigation to simulate human behavior
-      const preDelay = getRandomDelay(1000, 3000);
-      console.log(`⏱️ Pre-navigation delay: ${preDelay}ms`);
-      await (page as any).waitForTimeout(preDelay);
-      
-      // Log the navigation start
-      console.log(`🔄 Starting navigation to ${url}...`);
-      
-      try {
-        // Navigate to the URL with longer timeout and networkidle0 for complete page load
-        const response = await page.goto(url, {
-          waitUntil: 'networkidle0', // Wait until there are no network connections for at least 500ms
-          timeout: 30000, // Increased timeout to 30 seconds
-          ...options
-        });
         
-        // Check response status code
-        if (response) {
-          const status = response.status();
-          if (status >= 400) {
-            console.error(`❌ Navigation to ${url} failed with status code ${status}`);
-            
-            // Log response headers for debugging
-            console.log('Response headers:', await response.headers());
-            
-            // Get and log response body for error diagnosis
-            const responseBody = await response.text();
-            console.log(`Response body (first 1000 chars): ${responseBody.substring(0, 1000)}`);
-            
-            if (status === 403) {
-              console.error(`🚫 BLOCKED: Access to ${url} is forbidden - likely blocked by the server`);
+        // Try to find and click the checkbox or verification button
+        try {
+          // Look for common protection elements
+          const selectors = [
+            'input[type="checkbox"]',
+            'form .button',
+            '.captcha-container',
+            '#challenge-stage button',
+            '.ray-id'
+          ];
+          
+          for (const selector of selectors) {
+            const exists = await page.$(selector);
+            if (exists) {
+              console.log(`Found ${selector}, attempting to interact...`);
+              await page.click(selector);
+              await page.waitForTimeout(2000);
             }
           }
+          
+          // Wait for navigation after interaction
+          await page.waitForNavigation({ timeout: 10000 }).catch(() => {});
+          
+          // Check if we passed the protection
+          const finalHtml = await page.content();
+          const passed = !finalHtml.includes('challenge-running') && 
+                         !finalHtml.includes('challenge-form') && 
+                         !finalHtml.includes('captcha') &&
+                         !finalHtml.includes('cf-browser-verification') &&
+                         !finalHtml.includes('Just a moment') &&
+                         !finalHtml.includes('security check');
+          
+          if (passed) {
+            console.log('🎉 Successfully bypassed protection');
+            return true;
+          } else {
+            console.warn('⚠️ Failed to bypass protection');
+            return false;
+          }
+        } catch (error) {
+          console.error('❌ Error trying to bypass protection:', error);
+          return false;
         }
-        
-        return response;
-      } catch (error) {
-        const navigationError = error as Error;
-        console.error(`❌ Navigation failed: ${navigationError.message}`);
-        return null;
       }
       
-      // Random post-navigation delay to simulate reading the page
-      const postDelay = getRandomDelay(2000, 5000);
-      console.log(`⏱️ Post-navigation delay: ${postDelay}ms`);
-      await (page as any).waitForTimeout(postDelay);
-      
-      // Log the full HTML for verification
-      await (page as any).logHtml();
-      
-      return response;
-    } catch (error) {
-      console.error(`❌ Navigation error to ${url}:`, error);
-      return null;
-    }
-  }
-  
-  /**
-   * Wait for a selector with a timeout
-   */
-  async waitForSelector(page: puppeteer.Page, selector: string, timeout: number = 10000): Promise<boolean> {
-    try {
-      await page.waitForSelector(selector, { timeout });
+      // No protection detected
       return true;
     } catch (error) {
+      console.error('❌ Error in bypassProtection:', error);
       return false;
     }
   }
   
   /**
-   * Wait for a randomized delay
+   * Execute health check to verify Puppeteer is working
    */
-  async randomDelay(page: puppeteer.Page, min: number = 1000, max: number = 3000): Promise<void> {
-    await (page as any).waitForTimeout(getRandomDelay(min, max));
-  }
-  
-  /**
-   * Extract text from an element safely
-   */
-  async getElementText(page: puppeteer.Page, selector: string): Promise<string> {
+  async healthCheck(): Promise<{ status: 'ok' | 'error', details: any }> {
     try {
-      return await page.evaluate((sel) => {
-        const element = document.querySelector(sel);
-        return element ? element.textContent?.trim() || '' : '';
-      }, selector);
-    } catch (error) {
-      return '';
-    }
-  }
-  
-  /**
-   * Get attribute value from an element safely
-   */
-  async getElementAttribute(page: puppeteer.Page, selector: string, attribute: string): Promise<string> {
-    try {
-      return await page.evaluate((sel, attr) => {
-        const element = document.querySelector(sel);
-        return element ? element.getAttribute(attr) || '' : '';
-      }, selector, attribute);
-    } catch (error) {
-      return '';
-    }
-  }
-  
-  /**
-   * Click an element with randomized timing
-   */
-  async clickElement(page: puppeteer.Page, selector: string): Promise<boolean> {
-    try {
-      await this.randomDelay(page, 500, 1500);
-      await page.click(selector);
-      return true;
-    } catch (error) {
-      return false;
-    }
-  }
-  
-  /**
-   * Type text with human-like delays between keystrokes
-   */
-  async typeText(page: puppeteer.Page, selector: string, text: string): Promise<boolean> {
-    try {
-      await page.click(selector);
+      const testStart = Date.now();
       
-      // Clear existing text first
-      await page.evaluate((sel) => {
-        const element = document.querySelector(sel) as HTMLInputElement;
-        if (element) element.value = '';
-      }, selector);
+      // Create a test browser and page
+      const instance = await this.createBrowser();
+      const page = await instance.browser.newPage();
       
-      // Type with random delays between keystrokes
-      for (const char of text) {
-        await page.type(selector, char, { delay: getRandomDelay(50, 150) });
-      }
+      // Visit a simple site
+      await page.goto('https://example.com', { waitUntil: 'networkidle0', timeout: 30000 });
       
-      return true;
+      // Take a screenshot for verification
+      const screenshotPath = await this.saveScreenshot(page, 'health-check');
+      
+      // Get page title
+      const title = await page.title();
+      
+      // Close the page and browser
+      await page.close();
+      await this.closeBrowser(instance.id);
+      
+      return {
+        status: 'ok',
+        details: {
+          title,
+          executionTimeMs: Date.now() - testStart,
+          screenshotPath,
+          timestamp: new Date().toISOString()
+        }
+      };
     } catch (error) {
-      return false;
+      console.error('❌ Puppeteer health check failed:', error);
+      
+      return {
+        status: 'error',
+        details: {
+          error: (error as Error).message,
+          stack: (error as Error).stack,
+          timestamp: new Date().toISOString()
+        }
+      };
     }
   }
 }
 
-// Export a singleton instance
+// Export singleton instance
 export const puppeteerWrapper = new PuppeteerWrapper();

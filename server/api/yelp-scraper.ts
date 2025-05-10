@@ -1,477 +1,967 @@
-import axios from 'axios';
-import * as cheerio from 'cheerio';
-import { puppeteerWrapper } from './puppeteer-wrapper';
-import { getRandomUserAgent, getRandomDelay } from './scraper-utils';
-import * as puppeteer from 'puppeteer';
-
 /**
  * Service for scraping publicly available business information from Yelp
  * Only extracts information that businesses have explicitly made public
  */
+
+import { puppeteerWrapper } from './puppeteer-wrapper';
+import { BusinessData } from '../models/business-data';
+import axios from 'axios';
+import * as cheerio from 'cheerio';
+import * as fs from 'fs';
+import * as path from 'path';
+import { randomBytes } from 'crypto';
+
+// Helper interfaces
+interface UserAgentInfo {
+  userAgent: string;
+  name: string;
+  version: string | null;
+  os: string | null;
+  lastUsed: Date;
+  successRate: number;
+  totalAttempts: number;
+}
+
 export class YelpScraper {
+  private userAgents: UserAgentInfo[] = [
+    {
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+      name: 'Chrome',
+      version: '123.0.0.0',
+      os: 'Windows 10',
+      lastUsed: new Date(0),
+      successRate: 1.0,
+      totalAttempts: 0
+    },
+    {
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+      name: 'Safari',
+      version: '17.0',
+      os: 'macOS',
+      lastUsed: new Date(0),
+      successRate: 1.0,
+      totalAttempts: 0
+    },
+    {
+      userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+      name: 'Chrome',
+      version: '123.0.0.0',
+      os: 'Linux',
+      lastUsed: new Date(0),
+      successRate: 1.0,
+      totalAttempts: 0
+    },
+    {
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0',
+      name: 'Firefox',
+      version: '124.0',
+      os: 'Windows 10',
+      lastUsed: new Date(0),
+      successRate: 1.0,
+      totalAttempts: 0
+    },
+    {
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+      name: 'Safari Mobile',
+      version: '17.0',
+      os: 'iOS',
+      lastUsed: new Date(0), 
+      successRate: 1.0,
+      totalAttempts: 0
+    }
+  ];
+  
+  private logsDir = path.join(process.cwd(), 'logs');
+  
+  constructor() {
+    // Ensure logs directory exists
+    if (!fs.existsSync(this.logsDir)) {
+      fs.mkdirSync(this.logsDir, { recursive: true });
+    }
+  }
+
   /**
    * Search for businesses on Yelp and extract publicly available data
    * @param query Search query for finding businesses
-   * @param location Optional location to filter results
+   * @param location Optional location for more specific search
+   * @param executionId Optional ID for tracking this execution
+   * @param executionLog Optional log object for tracking execution details
    */
-  async searchBusinesses(query: string, location?: string): Promise<any[]> {
-    console.log(`Starting real Yelp scraping for: ${query}${location ? ' in ' + location : ''}`);
+  async searchBusinesses(
+    query: string, 
+    location?: string, 
+    executionId?: string,
+    executionLog?: any
+  ): Promise<{ businesses: BusinessData[], totalResults?: number }> {
+    const searchQuery = location ? `${query} in ${location}` : query;
+    const executionStartTime = Date.now();
+    
+    // Generate an execution ID if not provided
+    if (!executionId) {
+      executionId = `search-yelp-${Date.now()}-${randomBytes(4).toString('hex')}`;
+    }
+    
+    // Initialize execution log if not provided
+    if (!executionLog) {
+      executionLog = {
+        execution_id: executionId,
+        timestamp: new Date().toISOString(),
+        query_params: { query, location },
+        scraping_attempts: [],
+        scraping_results: [],
+        error_details: []
+      };
+    }
+    
+    console.log(`🔍 YelpScraper: Searching for "${searchQuery}"`);
+    
+    // Log this attempt
+    const attemptLog = {
+      source: 'yelp',
+      timestamp: new Date().toISOString(),
+      query: searchQuery,
+      method: 'axios',
+      status: 'pending'
+    };
+    
+    executionLog.scraping_attempts.push(attemptLog);
     
     try {
-      // First try with Axios and Cheerio (faster, less resource intensive)
-      const results = await this.scrapeYelpWithAxios(query, location);
-      if (results && results.length > 0) {
-        console.log(`Found ${results.length} businesses on Yelp using Axios`);
-        return results;
-      }
+      // First try using Axios (faster and less resource-intensive)
+      const result = await this.searchWithAxios(query, location, executionId, executionLog);
+      attemptLog.status = 'success';
       
-      // Fallback to Puppeteer if needed for more complex pages
-      return await this.scrapeYelpWithPuppeteer(query, location);
-    } catch (error) {
-      console.error('Error during Yelp scraping:', error);
-      return [];
-    }
-  }
-  
-  /**
-   * Scrape Yelp business listings using Axios and Cheerio
-   * @param query Search query for finding businesses
-   * @param location Optional location to filter results
-   */
-  private async scrapeYelpWithAxios(query: string, location?: string): Promise<any[]> {
-    try {
-      // Construct the Yelp search URL
-      const searchUrl = location 
-        ? `https://www.yelp.com/search?find_desc=${encodeURIComponent(query)}&find_loc=${encodeURIComponent(location)}`
-        : `https://www.yelp.com/search?find_desc=${encodeURIComponent(query)}`;
-      
-      console.log(`📍 YelpScraper: Using Axios to scrape ${searchUrl}`);
-      
-      // Make the request with a random user agent
-      const response = await axios.get(searchUrl, {
-        headers: {
-          'User-Agent': getRandomUserAgent(),
-          'Accept': 'text/html,application/xhtml+xml,application/xml',
-          'Accept-Language': 'en-US,en;q=0.9',
-        },
-        timeout: 15000
-      });
-      
-      if (response.status !== 200) {
-        throw new Error(`Failed to fetch Yelp search results: ${response.status}`);
-      }
-      
-      const html = response.data;
-      const $ = cheerio.load(html);
-      
-      // Look for business listings
-      const businesses: any[] = [];
-      
-      // Different selectors for Yelp business listings
-      const listingSelectors = [
-        'li.border-color--default__09f24__NPAKY',
-        'div[data-testid="serp-ia-card"]',
-        'li.border--bottom__09f24__alRjn',
-        'div.container__09f24__mpR8_',
-        'li.regular-search-result',
-        'div[class*="businessName"]'
-      ];
-      
-      // Try different selectors to find results
-      for (const selector of listingSelectors) {
-        const elements = $(selector);
-        if (elements.length > 0) {
-          console.log(`Found ${elements.length} Yelp listings with selector: ${selector}`);
-          
-          elements.each((i, el) => {
-            try {
-              // Extract business name
-              const nameElement = $(el).find('a[name], a[href*="/biz/"], h3 a, span[class*="businessName"]').first();
-              const name = nameElement.text().trim();
-              const businessUrl = nameElement.attr('href');
-              
-              // Only continue if we found a name and URL
-              if (name && businessUrl) {
-                // Extract ratings if available
-                const ratingElement = $(el).find('div[aria-label*="star rating"], [class*="star-rating"]');
-                let rating = null;
-                if (ratingElement.length) {
-                  const ratingText = ratingElement.attr('aria-label') || '';
-                  const ratingMatch = ratingText.match(/(\d+(\.\d+)?)/);
-                  if (ratingMatch) {
-                    rating = parseFloat(ratingMatch[1]);
-                  }
-                }
-                
-                // Extract address/location
-                const addressElement = $(el).find('address, [class*="secondaryAttributes"], [class*="address"]');
-                const address = addressElement.text().trim();
-                
-                // Extract business type/category
-                const categoryElement = $(el).find('span[class*="category"], a[href*="c_"], [class*="businessType"]');
-                const category = categoryElement.text().trim();
-                
-                // Build the full URL if it's a relative URL
-                let fullUrl = businessUrl;
-                if (businessUrl && businessUrl.startsWith('/')) {
-                  fullUrl = `https://www.yelp.com${businessUrl}`;
-                }
-                
-                // Create a place_id (unique identifier for our purposes)
-                const place_id = `yelp-${Date.now()}-${i}`;
-                
-                // Add the business to our results
-                businesses.push({
-                  place_id,
-                  name,
-                  yelp_url: fullUrl,
-                  formatted_address: address,
-                  vicinity: address,
-                  types: category ? category.toLowerCase().split(/,\s*/).map(c => c.replace(/\s+/g, '_')) : ['business'],
-                  rating,
-                  business_status: 'OPERATIONAL'
-                });
-              }
-            } catch (itemError) {
-              console.error('Error extracting Yelp business data:', itemError);
-            }
+      if (result.businesses.length === 0) {
+        attemptLog.status = 'empty';
+        console.log(`⚠️ YelpScraper: No results found for "${searchQuery}" using Axios`);
+        
+        // Try fallback method with Puppeteer
+        console.log(`🔄 YelpScraper: Trying fallback method with Puppeteer for "${searchQuery}"`);
+        const fallbackAttemptLog = {
+          source: 'yelp',
+          timestamp: new Date().toISOString(),
+          query: searchQuery,
+          method: 'puppeteer-fallback',
+          status: 'pending'
+        };
+        
+        executionLog.scraping_attempts.push(fallbackAttemptLog);
+        
+        try {
+          const fallbackResult = await this.searchWithPuppeteer(query, location, executionId, executionLog);
+          fallbackAttemptLog.status = fallbackResult.businesses.length > 0 ? 'success' : 'empty';
+          executionLog.scraping_results.push({
+            source: 'yelp-puppeteer',
+            timestamp: new Date().toISOString(),
+            count: fallbackResult.businesses.length,
+            execution_time_ms: Date.now() - executionStartTime,
+            first_result: fallbackResult.businesses[0] || null
           });
           
-          // If we found businesses with this selector, stop trying others
-          if (businesses.length > 0) {
-            break;
-          }
+          return fallbackResult;
+        } catch (fallbackError) {
+          fallbackAttemptLog.status = 'error';
+          executionLog.error_details.push({
+            source: 'yelp-puppeteer',
+            timestamp: new Date().toISOString(),
+            error: (fallbackError as Error).message,
+            stack: (fallbackError as Error).stack
+          });
+          
+          console.error(`❌ YelpScraper Puppeteer fallback error:`, fallbackError);
+          
+          // If both methods fail, return empty array
+          return { businesses: [] };
         }
       }
       
-      return businesses;
-    } catch (error) {
-      console.error('Error scraping Yelp with Axios:', error);
-      return [];
-    }
-  }
-  
-  /**
-   * Fallback method to scrape Yelp using Puppeteer for more complex cases
-   * @param query Search query for finding businesses
-   * @param location Optional location to filter results
-   */
-  private async scrapeYelpWithPuppeteer(query: string, location?: string): Promise<any[]> {
-    console.log(`📍 YelpScraper: Falling back to Puppeteer for scraping Yelp`);
-    
-    let browser: puppeteer.Browser | null = null;
-    
-    try {
-      // Construct the Yelp search URL
-      const searchUrl = location 
-        ? `https://www.yelp.com/search?find_desc=${encodeURIComponent(query)}&find_loc=${encodeURIComponent(location)}`
-        : `https://www.yelp.com/search?find_desc=${encodeURIComponent(query)}`;
-      
-      // Launch puppeteer browser
-      browser = await puppeteerWrapper.launch();
-      const page = await puppeteerWrapper.createPage(browser);
-      
-      // Navigate to Yelp
-      await puppeteerWrapper.navigate(page, searchUrl);
-      
-      // Wait for results to load
-      await puppeteerWrapper.randomDelay(page, 3000, 5000);
-      
-      // Check if we hit a CAPTCHA
-      const hasCaptcha = await (page as any).checkForCaptcha();
-      if (hasCaptcha) {
-        console.error('CAPTCHA detected on Yelp. Unable to proceed with scraping.');
-        await browser.close();
-        return [];
-      }
-      
-      // Wait for business listings to appear
-      const listingSelectors = [
-        'li.border-color--default__09f24__NPAKY',
-        'div[data-testid="serp-ia-card"]',
-        'li.border--bottom__09f24__alRjn',
-        'div.container__09f24__mpR8_',
-        'li.regular-search-result'
-      ];
-      
-      let foundListings = false;
-      for (const selector of listingSelectors) {
-        if (await puppeteerWrapper.waitForSelector(page, selector, 3000)) {
-          console.log(`Found Yelp listings with selector: ${selector}`);
-          foundListings = true;
-          break;
-        }
-      }
-      
-      if (!foundListings) {
-        console.log('Could not find Yelp business listings');
-        await browser.close();
-        return [];
-      }
-      
-      // Take a screenshot for debugging
-      try {
-        await page.screenshot({ path: './yelp-search-screenshot.png' });
-        console.log(`📍 YelpScraper: Captured screenshot of search results`);
-      } catch (screenshotError) {
-        console.error('Error taking screenshot:', screenshotError);
-      }
-      
-      // Extract business data from the search results
-      const results = await page.evaluate(() => {
-        const businesses: any[] = [];
-        
-        // Different selectors for Yelp business listings
-        const listingSelectors = [
-          'li.border-color--default__09f24__NPAKY',
-          'div[data-testid="serp-ia-card"]',
-          'li.border--bottom__09f24__alRjn',
-          'div.container__09f24__mpR8_',
-          'li.regular-search-result'
-        ];
-        
-        let elements: NodeListOf<Element> | null = null;
-        
-        // Try different selectors to find results
-        for (const selector of listingSelectors) {
-          const foundElements = document.querySelectorAll(selector);
-          if (foundElements && foundElements.length > 0) {
-            elements = foundElements;
-            break;
-          }
-        }
-        
-        if (!elements || elements.length === 0) {
-          return businesses;
-        }
-        
-        // Process listings
-        Array.from(elements).forEach((el, index) => {
-          try {
-            // Find the business name and link
-            const nameEl = el.querySelector('a[name], a[href*="/biz/"], h3 a, span[class*="businessName"]');
-            if (!nameEl) return;
-            
-            const name = nameEl.textContent ? nameEl.textContent.trim() : '';
-            const href = nameEl instanceof HTMLAnchorElement ? nameEl.href : null;
-            
-            if (!name || !href) return;
-            
-            // Extract address
-            const addressEl = el.querySelector('address, [class*="secondaryAttributes"], [class*="address"]');
-            const address = addressEl && addressEl.textContent ? addressEl.textContent.trim() : '';
-            
-            // Extract categories
-            const categoryEl = el.querySelector('span[class*="category"], a[href*="c_"], [class*="businessType"]');
-            const category = categoryEl && categoryEl.textContent ? categoryEl.textContent.trim() : '';
-            
-            // Extract rating
-            const ratingEl = el.querySelector('div[aria-label*="star rating"], [class*="star-rating"]');
-            let rating = null;
-            
-            if (ratingEl) {
-              const ratingText = ratingEl.getAttribute('aria-label') || '';
-              const ratingMatch = ratingText.match(/(\d+(\.\d+)?)/);
-              if (ratingMatch) {
-                rating = parseFloat(ratingMatch[1]);
-              }
-            }
-            
-            // Create a place_id (unique identifier for our purposes)
-            const place_id = `yelp-${Date.now()}-${index}`;
-            
-            // Add the business to our results
-            businesses.push({
-              place_id,
-              name,
-              yelp_url: href,
-              formatted_address: address,
-              vicinity: address,
-              types: category ? category.toLowerCase().split(/,\s*/).map((c: string) => c.replace(/\s+/g, '_')) : ['business'],
-              rating,
-              business_status: 'OPERATIONAL'
-            });
-          } catch (e) {
-            // Skip this item if we encounter an error
-            console.error('Error extracting business data:', e);
-          }
-        });
-        
-        return businesses;
+      // Log successful result
+      executionLog.scraping_results.push({
+        source: 'yelp',
+        timestamp: new Date().toISOString(),
+        count: result.businesses.length,
+        execution_time_ms: Date.now() - executionStartTime,
+        first_result: result.businesses[0] || null
       });
       
-      // Close the browser
-      await browser.close();
-      
-      console.log(`Found ${results.length} businesses on Yelp using Puppeteer`);
-      return results;
+      return result;
     } catch (error) {
-      console.error('Error during Yelp scraping with Puppeteer:', error);
-      if (browser) await browser.close();
-      return [];
+      attemptLog.status = 'error';
+      executionLog.error_details.push({
+        source: 'yelp-axios',
+        timestamp: new Date().toISOString(),
+        error: (error as Error).message,
+        stack: (error as Error).stack
+      });
+      
+      console.error(`❌ YelpScraper Axios error:`, error);
+      
+      // Try fallback method with Puppeteer
+      console.log(`🔄 YelpScraper: Trying fallback method with Puppeteer for "${searchQuery}"`);
+      const fallbackAttemptLog = {
+        source: 'yelp',
+        timestamp: new Date().toISOString(),
+        query: searchQuery,
+        method: 'puppeteer-fallback',
+        status: 'pending'
+      };
+      
+      executionLog.scraping_attempts.push(fallbackAttemptLog);
+      
+      try {
+        const fallbackResult = await this.searchWithPuppeteer(query, location, executionId, executionLog);
+        fallbackAttemptLog.status = fallbackResult.businesses.length > 0 ? 'success' : 'empty';
+        executionLog.scraping_results.push({
+          source: 'yelp-puppeteer',
+          timestamp: new Date().toISOString(),
+          count: fallbackResult.businesses.length,
+          execution_time_ms: Date.now() - executionStartTime,
+          first_result: fallbackResult.businesses[0] || null
+        });
+        
+        return fallbackResult;
+      } catch (fallbackError) {
+        fallbackAttemptLog.status = 'error';
+        executionLog.error_details.push({
+          source: 'yelp-puppeteer',
+          timestamp: new Date().toISOString(),
+          error: (fallbackError as Error).message,
+          stack: (fallbackError as Error).stack
+        });
+        
+        console.error(`❌ YelpScraper Puppeteer fallback error:`, fallbackError);
+        
+        // If both methods fail, return empty array
+        return { businesses: [] };
+      }
     }
   }
-  
+
   /**
-   * Get detailed information about a specific business from its Yelp page
-   * @param yelpUrl The Yelp URL for the business
+   * Get detailed information about a specific business on Yelp
+   * @param businessName The name of the business
+   * @param location Optional location for more specific search
    */
-  async getBusinessDetails(yelpUrl: string): Promise<any> {
-    console.log(`Getting detailed Yelp info for: ${yelpUrl}`);
-    
-    let browser: puppeteer.Browser | null = null;
+  async getBusinessDetails(
+    businessName: string, 
+    location?: string,
+    executionId?: string,
+    executionLog?: any
+  ): Promise<BusinessData | null> {
+    console.log(`🔍 YelpScraper: Getting details for "${businessName}" ${location ? `in ${location}` : ''}`);
     
     try {
-      // Launch puppeteer browser
-      browser = await puppeteerWrapper.launch();
-      const page = await puppeteerWrapper.createPage(browser);
+      // First search for the business
+      const searchResult = await this.searchBusinesses(businessName, location, executionId, executionLog);
       
-      // Navigate to the Yelp business page
-      await puppeteerWrapper.navigate(page, yelpUrl);
-      
-      // Wait for business details to load
-      await puppeteerWrapper.randomDelay(page, 3000, 5000);
-      
-      // Check if we hit a CAPTCHA
-      const hasCaptcha = await (page as any).checkForCaptcha();
-      if (hasCaptcha) {
-        console.error('CAPTCHA detected on Yelp. Unable to proceed with scraping.');
-        await browser.close();
+      if (searchResult.businesses.length === 0) {
+        console.log(`⚠️ YelpScraper: Business "${businessName}" not found`);
         return null;
       }
       
-      // Take a screenshot for debugging
-      try {
-        await page.screenshot({ path: './yelp-business-screenshot.png' });
-        console.log(`📍 YelpScraper: Captured screenshot of business page`);
-      } catch (screenshotError) {
-        console.error('Error taking screenshot:', screenshotError);
-      }
+      // Find the most relevant result (usually the first one)
+      const business = searchResult.businesses.find(b => 
+        this.normalizeString(b.name).includes(this.normalizeString(businessName))
+      ) || searchResult.businesses[0];
       
-      // Extract business information
-      const businessInfo = await page.evaluate(() => {
-        // Initialize results
-        const info: any = {
-          name: '',
-          address: '',
-          phone: '',
-          website: '',
-          business_hours: [],
-          categories: [],
-          rating: null,
-          reviews_count: null,
-          contacts: []
-        };
-        
-        // Extract business name
-        const nameEl = document.querySelector('h1');
-        if (nameEl && nameEl.textContent) {
-          info.name = nameEl.textContent.trim();
-        }
-        
-        // Extract address
-        const addressEl = document.querySelector('address p, [href*="maps"], [class*="address"]');
-        if (addressEl && addressEl.textContent) {
-          info.address = addressEl.textContent.trim();
-        }
-        
-        // Extract phone number
-        const phoneEl = document.querySelector('[href^="tel:"], p:contains("("), p:contains("+")');
-        if (phoneEl && phoneEl.textContent) {
-          info.phone = phoneEl.textContent.trim();
-        }
-        
-        // Extract website
-        const websiteEl = document.querySelector('a[href*="biz_redir"]');
-        if (websiteEl) {
-          info.website = websiteEl.getAttribute('href');
-        }
-        
-        // Extract business hours
-        const hoursEls = document.querySelectorAll('[class*="hour"], [class*="time"], table tr');
-        
-        if (hoursEls.length > 0) {
-          Array.from(hoursEls).forEach(el => {
-            if (el.textContent && el.textContent.trim() && 
-                (el.textContent.includes('day') || 
-                 el.textContent.includes('Mon') || 
-                 el.textContent.includes('Tue'))) {
-              info.business_hours.push(el.textContent.trim());
-            }
-          });
-        }
-        
-        // Extract categories
-        const categoryEls = document.querySelectorAll('a[href*="c_"], [class*="category"]');
-        
-        if (categoryEls.length > 0) {
-          Array.from(categoryEls).forEach(el => {
-            if (el.textContent) {
-              info.categories.push(el.textContent.trim());
-            }
-          });
-        }
-        
-        // Extract rating
-        const ratingEl = document.querySelector('[aria-label*="star rating"], [class*="star-rating"]');
-        
-        if (ratingEl) {
-          const ratingText = ratingEl.getAttribute('aria-label') || ratingEl.textContent;
-          if (ratingText) {
-            const match = ratingText.match(/(\d+(\.\d+)?)/);
-            if (match) {
-              info.rating = parseFloat(match[1]);
-            }
+      // If we have a Yelp URL, try to get more detailed information
+      if (business.yelp_url) {
+        try {
+          const detailedBusiness = await this.getBusinessDetailsByUrl(business.yelp_url, executionId, executionLog);
+          if (detailedBusiness) {
+            return {
+              ...business,
+              ...detailedBusiness,
+              contacts: [...(business.contacts || []), ...(detailedBusiness.contacts || [])]
+            };
           }
-        }
-        
-        // Extract review count
-        const reviewEl = document.querySelector('[class*="review-count"], [class*="reviews"]');
-        
-        if (reviewEl && reviewEl.textContent) {
-          const match = reviewEl.textContent.match(/(\d+)/);
-          if (match) {
-            info.reviews_count = parseInt(match[1]);
-          }
-        }
-        
-        return info;
-      });
-      
-      // If we have a business name, create basic contacts
-      if (businessInfo.name) {
-        // Basic contact for the business
-        const mainContact = {
-          id: 1,
-          name: `Contact at ${businessInfo.name}`,
-          position: businessInfo.categories && businessInfo.categories.length > 0 ? 
-                  `${businessInfo.categories[0]} Professional` : "Business Representative",
-          email: null,
-          companyPhone: businessInfo.phone || null,
-          personalPhone: null,
-          isDecisionMaker: true,
-          influence: 75,
-          notes: 'Contact information from Yelp business listing.'
-        };
-        
-        businessInfo.contacts = [mainContact];
-        
-        // If we have a website, add it to the business info
-        if (businessInfo.website) {
-          businessInfo.website_link = businessInfo.website;
+        } catch (detailError) {
+          console.error(`❌ YelpScraper detail error:`, detailError);
+          // Continue with the basic business info if detailed fetch fails
         }
       }
       
-      // Close the browser
-      await browser.close();
-      return businessInfo;
+      return business;
+      
     } catch (error) {
-      console.error('Error during Yelp business info scraping:', error);
-      if (browser) await browser.close();
+      console.error(`❌ YelpScraper error:`, error);
       return null;
     }
   }
+
+  /**
+   * Get detailed information about a business from its Yelp URL
+   */
+  private async getBusinessDetailsByUrl(
+    url: string,
+    executionId: string,
+    executionLog: any
+  ): Promise<BusinessData | null> {
+    // Select a good user agent
+    const userAgent = this.selectBestUserAgent();
+    
+    // Update the user agent's stats
+    userAgent.lastUsed = new Date();
+    userAgent.totalAttempts++;
+    
+    try {
+      // Log HTML snapshots to help with debugging
+      const snapshotDir = path.join(this.logsDir, 'snapshots');
+      if (!fs.existsSync(snapshotDir)) {
+        fs.mkdirSync(snapshotDir, { recursive: true });
+      }
+      
+      const snapshotPath = path.join(snapshotDir, `yelp-details-${executionId}.html`);
+      
+      // Make the HTTP request with axios
+      const response = await axios.get(url, {
+        headers: {
+          'User-Agent': userAgent.userAgent,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Connection': 'keep-alive'
+        },
+        timeout: 30000
+      });
+      
+      // Save HTML snapshot for debugging
+      fs.writeFileSync(snapshotPath, response.data);
+      
+      // Parse HTML with cheerio
+      const $ = cheerio.load(response.data);
+      
+      const business: BusinessData = {
+        name: $('h1').text().trim(),
+        address: this.getYelpAddress($),
+        phoneNumber: this.getYelpPhoneNumber($),
+        website: this.getYelpWebsite($),
+        industry: this.getYelpCategories($).join(', '),
+        location: this.getYelpAddress($),
+        size: 'Unknown',
+        contacts: this.getYelpContactsFromPage($),
+        data_source: 'yelp-details',
+        data_source_url: url,
+        extraction_date: new Date().toISOString(),
+        yelp_url: url,
+        google_rating: this.getYelpRating($),
+        review_count: this.getYelpReviewCount($)
+      };
+      
+      // Update user agent success rate based on results
+      userAgent.successRate = ((userAgent.successRate * (userAgent.totalAttempts - 1)) + 1) / userAgent.totalAttempts;
+      
+      return business;
+      
+    } catch (error) {
+      // Update user agent success rate on failure
+      userAgent.successRate = ((userAgent.successRate * (userAgent.totalAttempts - 1)) + 0) / userAgent.totalAttempts;
+      
+      // Try with Puppeteer as fallback
+      try {
+        return await this.getBusinessDetailsByUrlWithPuppeteer(url, executionId, executionLog);
+      } catch (puppeteerError) {
+        console.error(`❌ YelpScraper both Axios and Puppeteer detail fetch error:`, puppeteerError);
+        return null;
+      }
+    }
+  }
+
+  /**
+   * Get detailed information about a business from its Yelp URL using Puppeteer
+   */
+  private async getBusinessDetailsByUrlWithPuppeteer(
+    url: string,
+    executionId: string,
+    executionLog: any
+  ): Promise<BusinessData | null> {
+    // Select a good user agent
+    const userAgent = this.selectBestUserAgent();
+    
+    // Update the user agent's stats
+    userAgent.lastUsed = new Date();
+    userAgent.totalAttempts++;
+    
+    try {
+      // Log HTML snapshots to help with debugging
+      const snapshotDir = path.join(this.logsDir, 'snapshots');
+      if (!fs.existsSync(snapshotDir)) {
+        fs.mkdirSync(snapshotDir, { recursive: true });
+      }
+      
+      const snapshotPath = path.join(snapshotDir, `yelp-details-puppeteer-${executionId}.html`);
+      
+      // Launch puppeteer with the selected user agent
+      const page = await puppeteerWrapper.newPage(userAgent.userAgent);
+      
+      // Go to Yelp business page
+      await puppeteerWrapper.bypassProtection(page, url);
+      
+      // Save a snapshot of the HTML for debugging
+      const html = await page.content();
+      fs.writeFileSync(snapshotPath, html);
+      
+      // Extract business data
+      const business = await page.evaluate(() => {
+        // Helper function to safely query text content
+        const getText = (selector: string) => {
+          const element = document.querySelector(selector);
+          return element ? element.textContent?.trim() : '';
+        };
+        
+        // Get the business name
+        const name = getText('h1');
+        
+        // Get address
+        const addressElement = document.querySelector('[href^="https://maps.google.com"]');
+        const address = addressElement ? addressElement.textContent?.trim() : '';
+        
+        // Get phone number
+        const phoneLink = document.querySelector('a[href^="tel:"]');
+        const phoneNumber = phoneLink ? phoneLink.textContent?.trim() : '';
+        
+        // Get website
+        const websiteLink = document.querySelector('a[href^="https://www.yelp.com/biz_redir"]');
+        const website = websiteLink ? websiteLink.getAttribute('href') || '' : '';
+        
+        // Get categories
+        const categories: string[] = [];
+        document.querySelectorAll('a[href^="/search?cflt="]').forEach(el => {
+          const category = el.textContent?.trim();
+          if (category) {
+            categories.push(category);
+          }
+        });
+        
+        // Get rating
+        const ratingText = getText('div[aria-label*="star rating"]');
+        const ratingMatch = ratingText.match(/([\d.]+)/);
+        const rating = ratingMatch ? parseFloat(ratingMatch[1]) : 0;
+        
+        // Get review count
+        const reviewText = getText('a[href$="?sort_by=date_desc"]');
+        const reviewMatch = reviewText.match(/(\d+)/);
+        const reviewCount = reviewMatch ? parseInt(reviewMatch[1], 10) : 0;
+        
+        // Try to find staff/contact names
+        const contacts: any[] = [];
+        document.querySelectorAll('.user-passport-info').forEach(el => {
+          const name = getText('.user-passport-info .user-display-name');
+          const title = getText('.user-passport-info .user-title');
+          
+          if (name) {
+            contacts.push({
+              name,
+              position: title || 'Staff',
+              isDecisionMaker: title ? title.toLowerCase().includes('owner') || title.toLowerCase().includes('manager') : false
+            });
+          }
+        });
+        
+        return {
+          name,
+          address,
+          phoneNumber,
+          website,
+          categories: categories.join(', '),
+          rating,
+          reviewCount,
+          contacts
+        };
+      });
+      
+      // Format and return data
+      const formattedBusiness: BusinessData = {
+        name: business.name,
+        address: business.address,
+        phoneNumber: business.phoneNumber,
+        website: business.website,
+        industry: business.categories,
+        location: business.address,
+        size: 'Unknown',
+        contacts: business.contacts.map((c: any) => ({
+          name: c.name,
+          position: c.position,
+          email: '',
+          phoneNumber: '',
+          isDecisionMaker: c.isDecisionMaker
+        })),
+        data_source: 'yelp-details-puppeteer',
+        data_source_url: url,
+        extraction_date: new Date().toISOString(),
+        yelp_url: url,
+        google_rating: business.rating,
+        review_count: business.reviewCount
+      };
+      
+      // Close the page when done
+      await page.close();
+      
+      // Update user agent success rate
+      userAgent.successRate = ((userAgent.successRate * (userAgent.totalAttempts - 1)) + 1) / userAgent.totalAttempts;
+      
+      return formattedBusiness;
+      
+    } catch (error) {
+      // Update user agent success rate on failure
+      userAgent.successRate = ((userAgent.successRate * (userAgent.totalAttempts - 1)) + 0) / userAgent.totalAttempts;
+      
+      // Log detailed error for later analysis
+      const errorLog = {
+        source: 'yelp-details-puppeteer',
+        timestamp: new Date().toISOString(),
+        user_agent: userAgent.userAgent,
+        error: (error as Error).message,
+        stack: (error as Error).stack,
+        url
+      };
+      
+      executionLog.error_details.push(errorLog);
+      
+      console.error(`❌ YelpScraper Puppeteer details error: ${(error as Error).message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Search Yelp using Axios
+   */
+  private async searchWithAxios(
+    query: string,
+    location: string | undefined,
+    executionId: string,
+    executionLog: any
+  ): Promise<{ businesses: BusinessData[], totalResults?: number }> {
+    // Select a good user agent
+    const userAgent = this.selectBestUserAgent();
+    
+    // Update the user agent's stats
+    userAgent.lastUsed = new Date();
+    userAgent.totalAttempts++;
+    
+    try {
+      // Construct URL
+      let url = 'https://www.yelp.com/search?find_desc=' + encodeURIComponent(query);
+      if (location) {
+        url += '&find_loc=' + encodeURIComponent(location);
+      }
+      
+      // Log HTML snapshots to help with debugging
+      const snapshotDir = path.join(this.logsDir, 'snapshots');
+      if (!fs.existsSync(snapshotDir)) {
+        fs.mkdirSync(snapshotDir, { recursive: true });
+      }
+      
+      const snapshotPath = path.join(snapshotDir, `yelp-axios-${executionId}.html`);
+      
+      // Make the HTTP request
+      const response = await axios.get(url, {
+        headers: {
+          'User-Agent': userAgent.userAgent,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Connection': 'keep-alive'
+        },
+        timeout: 30000
+      });
+      
+      // Save HTML snapshot for debugging
+      fs.writeFileSync(snapshotPath, response.data);
+      
+      // Check if we've been blocked
+      if (response.data.includes('captcha') || response.data.includes('human verification')) {
+        console.warn('⚠️ YelpScraper: Detected anti-scraping measures on Yelp. Falling back to Puppeteer.');
+        userAgent.successRate = ((userAgent.successRate * (userAgent.totalAttempts - 1)) + 0) / userAgent.totalAttempts;
+        throw new Error('Anti-scraping measures detected');
+      }
+      
+      // Parse HTML
+      const $ = cheerio.load(response.data);
+      
+      const businesses: BusinessData[] = [];
+      
+      // Extract business listings
+      $('div[data-testid="serp-content"] ul li').each((i, el) => {
+        // Business name
+        const nameElement = $(el).find('a[data-testid="business-link"]');
+        const name = nameElement.text().trim();
+        const yelpUrl = nameElement.attr('href') ? `https://www.yelp.com${nameElement.attr('href')}` : '';
+        
+        // Skip ads or non-business elements
+        if (!name || !yelpUrl) return;
+        
+        // Rating
+        const ratingText = $(el).find('div[aria-label*="star rating"]').attr('aria-label') || '';
+        const ratingMatch = ratingText.match(/([\d.]+) star rating/);
+        const rating = ratingMatch ? parseFloat(ratingMatch[1]) : 0;
+        
+        // Review count
+        const reviewText = $(el).find('a[href*="reviews"]').text();
+        const reviewMatch = reviewText.match(/(\d+)/);
+        const reviewCount = reviewMatch ? parseInt(reviewMatch[1], 10) : 0;
+        
+        // Categories
+        const categories: string[] = [];
+        $(el).find('a[href^="/search?cflt="]').each((j, catEl) => {
+          const category = $(catEl).text().trim();
+          if (category) {
+            categories.push(category);
+          }
+        });
+        
+        // Address
+        const address = $(el).find('[data-testid="business-address-container"]').text().trim();
+        
+        // Phone number (typically not available in search results)
+        const phoneNumber = '';
+        
+        // Website (typically not available in search results)
+        const website = '';
+        
+        // Add to businesses array
+        businesses.push({
+          name,
+          address,
+          phoneNumber,
+          website,
+          industry: categories.join(', '),
+          location: address || (location || ''),
+          size: 'Unknown',
+          contacts: [],
+          data_source: 'yelp',
+          data_source_url: yelpUrl,
+          extraction_date: new Date().toISOString(),
+          yelp_url: yelpUrl,
+          google_rating: rating,
+          review_count: reviewCount
+        });
+      });
+      
+      // Update user agent success rate
+      userAgent.successRate = ((userAgent.successRate * (userAgent.totalAttempts - 1)) + 1) / userAgent.totalAttempts;
+      
+      return { businesses };
+      
+    } catch (error) {
+      // Update user agent success rate
+      userAgent.successRate = ((userAgent.successRate * (userAgent.totalAttempts - 1)) + 0) / userAgent.totalAttempts;
+      
+      // Log detailed error for later analysis
+      const errorLog = {
+        source: 'yelp-axios',
+        timestamp: new Date().toISOString(),
+        user_agent: userAgent.userAgent,
+        error: (error as Error).message,
+        stack: (error as Error).stack
+      };
+      
+      executionLog.error_details.push(errorLog);
+      
+      console.error(`❌ YelpScraper Axios error: ${(error as Error).message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Search Yelp using Puppeteer as a fallback method
+   */
+  private async searchWithPuppeteer(
+    query: string,
+    location: string | undefined,
+    executionId: string,
+    executionLog: any
+  ): Promise<{ businesses: BusinessData[], totalResults?: number }> {
+    // Select a good user agent
+    const userAgent = this.selectBestUserAgent();
+    
+    // Update the user agent's stats
+    userAgent.lastUsed = new Date();
+    userAgent.totalAttempts++;
+    
+    try {
+      // Construct URL
+      let url = 'https://www.yelp.com/search?find_desc=' + encodeURIComponent(query);
+      if (location) {
+        url += '&find_loc=' + encodeURIComponent(location);
+      }
+      
+      // Log HTML snapshots to help with debugging
+      const snapshotDir = path.join(this.logsDir, 'snapshots');
+      if (!fs.existsSync(snapshotDir)) {
+        fs.mkdirSync(snapshotDir, { recursive: true });
+      }
+      
+      const snapshotPath = path.join(snapshotDir, `yelp-puppeteer-${executionId}.html`);
+      
+      // Launch puppeteer with the selected user agent
+      const page = await puppeteerWrapper.newPage(userAgent.userAgent);
+      
+      // Go to Yelp search
+      await puppeteerWrapper.bypassProtection(page, url);
+      
+      // Wait for search results to load
+      await page.waitForSelector('div[data-testid="serp-content"]', { timeout: 30000 });
+      
+      // Save a snapshot of the HTML for debugging
+      const html = await page.content();
+      fs.writeFileSync(snapshotPath, html);
+      
+      // Extract business data
+      const businesses = await page.evaluate(() => {
+        const results: any[] = [];
+        
+        // Helper function to safely get text content
+        const getText = (element: Element, selector: string): string => {
+          const el = element.querySelector(selector);
+          return el ? el.textContent?.trim() || '' : '';
+        };
+        
+        // Get all business listings
+        const listings = document.querySelectorAll('div[data-testid="serp-content"] ul li');
+        
+        listings.forEach(listing => {
+          // Business name and URL
+          const nameElement = listing.querySelector('a[data-testid="business-link"]');
+          if (!nameElement) return; // Skip if no name element (probably not a business)
+          
+          const name = nameElement.textContent?.trim() || '';
+          const href = nameElement.getAttribute('href') || '';
+          const yelpUrl = href ? `https://www.yelp.com${href}` : '';
+          
+          // Skip ads or non-business elements
+          if (!name || !yelpUrl) return;
+          
+          // Rating
+          const ratingElement = listing.querySelector('div[aria-label*="star rating"]');
+          const ratingText = ratingElement ? ratingElement.getAttribute('aria-label') || '' : '';
+          const ratingMatch = ratingText.match(/([\d.]+) star rating/);
+          const rating = ratingMatch ? parseFloat(ratingMatch[1]) : 0;
+          
+          // Review count
+          const reviewElement = listing.querySelector('a[href*="reviews"]');
+          const reviewText = reviewElement ? reviewElement.textContent?.trim() || '' : '';
+          const reviewMatch = reviewText.match(/(\d+)/);
+          const reviewCount = reviewMatch ? parseInt(reviewMatch[1], 10) : 0;
+          
+          // Categories
+          const categories: string[] = [];
+          listing.querySelectorAll('a[href^="/search?cflt="]').forEach(catEl => {
+            const category = catEl.textContent?.trim() || '';
+            if (category) {
+              categories.push(category);
+            }
+          });
+          
+          // Address
+          const address = getText(listing, '[data-testid="business-address-container"]');
+          
+          results.push({
+            name,
+            address,
+            yelpUrl,
+            rating,
+            reviewCount,
+            categories: categories.join(', ')
+          });
+        });
+        
+        return results;
+      });
+      
+      // Close the page when done
+      await page.close();
+      
+      // Format and return data
+      const formattedBusinesses: BusinessData[] = businesses.map(b => ({
+        name: b.name,
+        address: b.address,
+        phoneNumber: '',
+        website: '',
+        industry: b.categories,
+        location: b.address || (location || ''),
+        size: 'Unknown',
+        contacts: [],
+        data_source: 'yelp-puppeteer',
+        data_source_url: b.yelpUrl,
+        extraction_date: new Date().toISOString(),
+        yelp_url: b.yelpUrl,
+        google_rating: b.rating,
+        review_count: b.reviewCount
+      }));
+      
+      // Update user agent success rate
+      userAgent.successRate = ((userAgent.successRate * (userAgent.totalAttempts - 1)) + 1) / userAgent.totalAttempts;
+      
+      return { businesses: formattedBusinesses };
+      
+    } catch (error) {
+      // Update user agent success rate
+      userAgent.successRate = ((userAgent.successRate * (userAgent.totalAttempts - 1)) + 0) / userAgent.totalAttempts;
+      
+      // Log detailed error for later analysis
+      const errorLog = {
+        source: 'yelp-puppeteer',
+        timestamp: new Date().toISOString(),
+        user_agent: userAgent.userAgent,
+        error: (error as Error).message,
+        stack: (error as Error).stack
+      };
+      
+      executionLog.error_details.push(errorLog);
+      
+      console.error(`❌ YelpScraper Puppeteer error: ${(error as Error).message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Extract address from Yelp business page
+   */
+  private getYelpAddress($: cheerio.CheerioAPI): string {
+    // Try different ways Yelp might structure the address
+    const addressElement = $('[href^="https://maps.google.com"]').first();
+    if (addressElement.length) {
+      return addressElement.text().trim();
+    }
+    
+    // Try another common pattern
+    const addressContainer = $('[data-testid="bizDetailsHeader"] address').first();
+    if (addressContainer.length) {
+      return addressContainer.text().trim();
+    }
+    
+    return '';
+  }
+
+  /**
+   * Extract phone number from Yelp business page
+   */
+  private getYelpPhoneNumber($: cheerio.CheerioAPI): string {
+    // Look for phone links
+    const phoneLink = $('a[href^="tel:"]').first();
+    if (phoneLink.length) {
+      return phoneLink.text().trim();
+    }
+    
+    return '';
+  }
+
+  /**
+   * Extract website URL from Yelp business page
+   */
+  private getYelpWebsite($: cheerio.CheerioAPI): string {
+    // Yelp redirects external websites, so look for the redirect link
+    const websiteLink = $('a[href^="https://www.yelp.com/biz_redir"]').first();
+    if (websiteLink.length) {
+      return websiteLink.attr('href') || '';
+    }
+    
+    return '';
+  }
+
+  /**
+   * Extract categories from Yelp business page
+   */
+  private getYelpCategories($: cheerio.CheerioAPI): string[] {
+    const categories: string[] = [];
+    
+    $('a[href^="/search?cflt="]').each((i, el) => {
+      const category = $(el).text().trim();
+      if (category) {
+        categories.push(category);
+      }
+    });
+    
+    return categories;
+  }
+
+  /**
+   * Extract rating from Yelp business page
+   */
+  private getYelpRating($: cheerio.CheerioAPI): number {
+    const ratingElement = $('div[aria-label*="star rating"]').first();
+    if (ratingElement.length) {
+      const ariaLabel = ratingElement.attr('aria-label') || '';
+      const match = ariaLabel.match(/([\d.]+) star rating/);
+      if (match) {
+        return parseFloat(match[1]);
+      }
+    }
+    
+    return 0;
+  }
+
+  /**
+   * Extract review count from Yelp business page
+   */
+  private getYelpReviewCount($: cheerio.CheerioAPI): number {
+    const reviewElement = $('a[href$="?sort_by=date_desc"]').first();
+    if (reviewElement.length) {
+      const text = reviewElement.text();
+      const match = text.match(/(\d+)/);
+      if (match) {
+        return parseInt(match[1], 10);
+      }
+    }
+    
+    return 0;
+  }
+
+  /**
+   * Extract contacts from Yelp business page
+   */
+  private getYelpContactsFromPage($: cheerio.CheerioAPI): any[] {
+    const contacts: any[] = [];
+    
+    // Look for owner/manager profiles
+    $('.user-passport-info').each((i, el) => {
+      const name = $(el).find('.user-display-name').text().trim();
+      const title = $(el).find('.user-title').text().trim();
+      
+      if (name) {
+        contacts.push({
+          name,
+          position: title || 'Staff',
+          email: '',
+          phoneNumber: '',
+          isDecisionMaker: title ? 
+            title.toLowerCase().includes('owner') || 
+            title.toLowerCase().includes('manager') ||
+            title.toLowerCase().includes('director') : 
+            false
+        });
+      }
+    });
+    
+    return contacts;
+  }
+
+  /**
+   * Select the best user agent for scraping based on success rate and last used date
+   */
+  private selectBestUserAgent(): UserAgentInfo {
+    // Sort user agents by success rate (descending) and last used date (ascending)
+    const sortedAgents = [...this.userAgents].sort((a, b) => {
+      // Prioritize success rate with a weight of 0.7
+      const successRateDiff = (b.successRate - a.successRate) * 0.7;
+      
+      // Also consider when the agent was last used (prefer ones not used recently)
+      const lastUsedDiff = (a.lastUsed.getTime() - b.lastUsed.getTime()) / (1000 * 60 * 60) * 0.3;
+      
+      return successRateDiff + lastUsedDiff;
+    });
+    
+    // Choose the best agent
+    return sortedAgents[0];
+  }
+
+  /**
+   * Helper function to normalize strings for comparison
+   */
+  private normalizeString(str: string): string {
+    return str.toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
 }
 
-// Export singleton instance
 export const yelpScraper = new YelpScraper();
