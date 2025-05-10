@@ -119,7 +119,7 @@ export class B2CSearchController {
       });
       
       // Execute searches in background using Google Places API
-      this._executeConsumerBatchSearch(batchId, services, locations, maxResults);
+      this._executeBatchSearch(batchId, services, locations, maxResults);
     } catch (error: any) {
       console.error('B2CSearchController batch error:', error);
       res.status(500).json({
@@ -181,26 +181,36 @@ export class B2CSearchController {
             const executionId = generateExecutionId();
             console.log(`🔍 B2CSearchController: Batch ${batchId} - Searching for "${service}" in ${location}`);
             
-            // Create proxy manager and scraper for this execution
-            const proxyManager = createEnhancedProxyManager(executionId);
-            const scraper = createProxyCheerioScraper(executionId, proxyManager);
+            // Use the B2C Places Service to fetch real consumer leads
+            console.log(`🔍 B2CSearchController: Batch ${batchId} - Using Google Places API to find consumers in ${location}`);
             
-            // Configure search parameters
-            const searchParams: SearchParams = {
+            // Execute the search using B2C Places API
+            const consumerResult = await b2cPlacesService.getConsumerLeads(location, maxResults || 50);
+            
+            if (!consumerResult.success) {
+              console.error(`Error fetching consumer leads for ${location}:`, consumerResult.error);
+              continue;
+            }
+            
+            // Create a compatible result object for backward compatibility
+            const result = {
+              executionId,
+              timestamp: new Date().toISOString(),
               query: service,
               location,
-              maxResults: maxResults || 50,
-              onlyDecisionMakers: onlyDecisionMakers !== false,
-              useProxies: useProxies !== false
+              businesses: [],
+              businessCount: 0,
+              contacts: consumerResult.leads,
+              contactCount: consumerResult.leads.length,
+              sources: [{ name: 'google-places', count: consumerResult.leads.length, success: true }],
+              errors: consumerResult.error ? [consumerResult.error] : [],
+              warnings: []
             };
             
-            // Execute the search
-            const result = await scraper.search(searchParams);
-            allResults.push(result);
+            allResults.push(result as any);
             
             // Update totals
-            totalBusinesses += result.businessCount;
-            totalContacts += result.contactCount;
+            totalContacts += consumerResult.leads.length;
             
             // Cache the result
             this.cacheResult(result);
@@ -208,59 +218,42 @@ export class B2CSearchController {
             // Create sheet for this search
             const sheetName = `${service} - ${location}`.slice(0, 31);
             
-            // Create data for the sheet
+            // Create data for the sheet - using consumer lead format
             const data: any[][] = [
               [
-                'Business Name',
-                'Category',
+                'Name',
+                'Job Title',
                 'Address',
-                'Phone',
+                'Property Type',
+                'Property Size',
+                'Cleaning Need',
+                'Budget',
                 'Email',
-                'Website',
-                'Source',
-                'Contact Name',
-                'Position',
-                'Contact Email',
-                'Contact Phone',
-                'Decision Maker'
+                'Phone',
+                'Inquiry Date',
+                'Lead Score',
+                'Hot Lead',
+                'Notes'
               ]
             ];
             
-            // Add businesses and contacts to the data
-            result.businesses.forEach(business => {
-              if (business.contacts && business.contacts.length > 0) {
-                business.contacts.forEach(contact => {
-                  data.push([
-                    business.name,
-                    business.category || 'Cleaning Service',
-                    business.address || '',
-                    business.phoneNumber || '',
-                    business.email || '',
-                    business.website || '',
-                    business.source || '',
-                    contact.name || '',
-                    contact.position || '',
-                    contact.email || '',
-                    contact.phoneNumber || '',
-                    contact.isDecisionMaker ? 'Yes' : 'No'
-                  ]);
-                });
-              } else {
-                data.push([
-                  business.name,
-                  business.category || 'Cleaning Service',
-                  business.address || '',
-                  business.phoneNumber || '',
-                  business.email || '',
-                  business.website || '',
-                  business.source || '',
-                  '', // No contact
-                  '',
-                  '',
-                  '',
-                  ''
-                ]);
-              }
+            // Add consumer leads to the data
+            consumerResult.leads.forEach(lead => {
+              data.push([
+                lead.name || '',
+                lead.jobTitle || '',
+                lead.address || '',
+                lead.propertyType || '',
+                lead.propertySize || '',
+                lead.cleaningNeed || '',
+                lead.budget || '',
+                lead.email || '',
+                lead.phoneNumber || '',
+                lead.inquiryDate || '',
+                lead.leadScore?.toString() || '',
+                lead.isHotLead ? 'Yes' : 'No',
+                lead.notes || ''
+              ]);
             });
             
             // Add sheet to workbook
