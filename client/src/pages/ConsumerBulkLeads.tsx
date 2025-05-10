@@ -40,8 +40,9 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileSpreadsheet, FileDown, FilePlus, Filter, Search, User } from 'lucide-react';
+import { FileSpreadsheet, FileDown, FilePlus, Filter, Search, User, ShieldCheck } from 'lucide-react';
 import { apiRequest } from "@/lib/queryClient";
+import LeadValidationIndicator from "@/components/LeadValidationIndicator";
 
 // Consumer lead type definition
 interface ConsumerLead {
@@ -427,6 +428,7 @@ const ConsumerBulkLeads: React.FC = () => {
                       <TableHead>Name</TableHead>
                       <TableHead>Contact</TableHead>
                       <TableHead>Cleaning Need</TableHead>
+                      <TableHead>Validation</TableHead>
                       <TableHead className="text-right">Score</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -437,11 +439,6 @@ const ConsumerBulkLeads: React.FC = () => {
                           <div className="flex items-center">
                             {lead.name} 
                             {lead.isHotLead && <span className="text-orange-500 ml-1">🔥</span>}
-                            {Math.random() > 0.7 && (
-                              <Badge variant="outline" className="ml-2 bg-green-50 text-green-700 hover:bg-green-50 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
-                                Verified
-                              </Badge>
-                            )}
                           </div>
                           <div className="text-sm text-muted-foreground truncate max-w-[200px]">{lead.address}</div>
                         </TableCell>
