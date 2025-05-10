@@ -568,6 +568,9 @@ function runLeadGeneration() {
   // Generate the leads
   const leads = generateConsumerLeads(MAX_LEADS, LOCATION);
   
+  // Validate leads if validation server is running
+  validateLeads(leads, LOCATION);
+  
   // Save to CSV and JSON
   const csvPath = saveLeadsToCsv(leads, LOCATION);
   const jsonPath = saveLeadsToJson(leads, LOCATION);
@@ -577,10 +580,97 @@ function runLeadGeneration() {
   leads.forEach(lead => {
     jobTitleCounts[lead.jobTitle] = (jobTitleCounts[lead.jobTitle] || 0) + 1;
   });
-  
-  // Print job title distribution
-  console.log('\nJob Title Distribution:');
-  const sortedTitles = Object.entries(jobTitleCounts).sort((a, b) => b[1] - a[1]);
+}
+
+/**
+ * Validate leads using the validation API
+ */
+async function validateLeads(leads, location) {
+  try {
+    console.log(`Attempting to validate ${leads.length} leads for ${location}...`);
+    
+    // Check if validation server is running
+    const isServerRunning = await checkValidationServer();
+    
+    if (!isServerRunning) {
+      console.log('Validation server not running. Skipping validation.');
+      return;
+    }
+    
+    // Prepare leads for validation
+    const leadsForValidation = leads.map(lead => ({
+      id: lead.id,
+      name: lead.name,
+      phoneNumber: lead.phoneNumber,
+      email: lead.email,
+      address: lead.address,
+      jobTitle: lead.jobTitle
+    }));
+    
+    // Create directory for validation results if it doesn't exist
+    const validationDir = 'validation_results';
+    if (!fs.existsSync(validationDir)) {
+      fs.mkdirSync(validationDir, { recursive: true });
+    }
+    
+    // Call validation API
+    console.log('Calling validation API...');
+    fetch('http://localhost:5000/api/validate/batch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ leads: leadsForValidation })
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`Validation API error: ${response.statusText}`);
+      }
+      return response.json();
+    })
+    .then(result => {
+      if (result.success) {
+        console.log(`Validation completed for ${location}`);
+        console.log(`Summary: ${result.summary.valid} valid, ${result.summary.suspicious} suspicious, ${result.summary.invalid} invalid leads`);
+        
+        // Save validation results
+        const filename = location.replace(/,?\s+/g, '_').toLowerCase();
+        fs.writeFileSync(
+          `${validationDir}/${filename}_validation.json`, 
+          JSON.stringify(result, null, 2)
+        );
+        
+        console.log(`Validation results saved to ${validationDir}/${filename}_validation.json`);
+      } else {
+        console.error(`Validation failed: ${result.error}`);
+      }
+    })
+    .catch(error => {
+      console.error('Error calling validation API:', error.message);
+    });
+  } catch (error) {
+    console.error('Error in validation process:', error);
+  }
+}
+
+/**
+ * Check if validation server is running
+ */
+async function checkValidationServer() {
+  try {
+    const response = await fetch('http://localhost:5000/api/validate/settings', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    return response.ok;
+  } catch (error) {
+    console.log('Validation server check failed:', error.message);
+    return false;
+  }
+}
   sortedTitles.forEach(([title, count]) => {
     console.log(`  ${title}: ${count} leads (${Math.round(count/leads.length*100)}%)`);
   });
