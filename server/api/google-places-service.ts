@@ -338,6 +338,41 @@ export class GooglePlacesService {
         console.warn(`⚠️ GooglePlacesService: ${businessesWithNoContactMethods.length} businesses had no contact methods (phone/website)`);
       }
       
+      // Process results with the lead uniqueness improvement script
+      try {
+        // Import the lead uniqueness module
+        const { processSearchResults } = require('../scripts/improve-lead-uniqueness');
+        
+        // Process the results to improve uniqueness
+        const {
+          businesses: optimizedBusinesses,
+          skippedDuplicates, 
+          stats
+        } = processSearchResults(businesses);
+        
+        // Use the optimized businesses instead of the original
+        let processedBusinesses = optimizedBusinesses;
+        
+        // Log stats about uniqueness optimization
+        console.log(`📊 GooglePlacesService: Lead optimization - ${stats.duplicatesSkipped} duplicate businesses removed`);
+        console.log(`📊 GooglePlacesService: Lead optimization - ${stats.contactsRemoved} duplicate contacts removed`);
+        console.log(`📊 GooglePlacesService: Lead optimization - ${skippedDuplicates.length} businesses skipped as duplicates`);
+        
+        // Log any businesses that were skipped for uniqueness
+        if (skippedDuplicates.length > 0) {
+          console.log(`📝 GooglePlacesService: Skipped duplicates for review:`);
+          skippedDuplicates.forEach((business: BusinessData) => {
+            console.log(`  - ${business.name} (${business.address})`);
+          });
+        }
+        
+        // Replace the original businesses array with the optimized one
+        businesses = processedBusinesses;
+      } catch (error) {
+        console.error(`❌ GooglePlacesService: Error optimizing leads for uniqueness:`, error);
+        // Continue with unoptimized results if the optimization fails
+      }
+      
       // Log the final business count vs. initial results count
       const totalProcessedBusinesses = businesses.length;
       const totalContactsGenerated = businesses.reduce((sum, business) => sum + (business.contacts?.length || 0), 0);

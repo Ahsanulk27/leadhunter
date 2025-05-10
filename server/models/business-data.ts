@@ -1,83 +1,54 @@
 /**
- * Business data models for the NexLead application
- * Contains all types and interfaces related to business and contact data
- */
-
-/**
- * Contact information associated with a business
+ * Data models for business and contact information
  */
 export interface Contact {
-  contactId: string;
+  contactId?: string;
   name: string;
   position?: string;
   email?: string;
   phoneNumber?: string;
   isDecisionMaker?: boolean;
-  companyName: string;
-  companyId?: string;  // Added to reference the source business ID
-  notes?: string;
+  isPrimary?: boolean;
+  companyName?: string;
+  companyId?: string;
+  id?: number;
+  searchDate?: Date;
   lastContactDate?: Date | null;
 }
 
-/**
- * Business or company data
- */
 export interface BusinessData {
   id: string;
   name: string;
-  description?: string;
   address?: string;
   phoneNumber?: string;
-  email?: string;
   website?: string;
+  description?: string;
   category?: string;
   rating?: number;
   reviewCount?: number;
-  yearEstablished?: string;
-  source: string;
-  sourceUrl: string;
-  imageUrl?: string;  // Added to store business image URL
+  imageUrl?: string;
+  source?: string;
+  sourceUrl?: string;
+  scrapedDate?: Date;
   contacts?: Contact[];
-  scrapedDate: Date;
-  isDecisionMaker?: boolean;
 }
 
-/**
- * Search parameters for lead generation
- */
-export interface SearchParams {
-  query: string;
-  location?: string;
-  page?: number;
-  limit?: number;
-}
-
-/**
- * Result of a scraping operation
- */
 export interface ScrapingResult {
+  success: boolean;
   businesses: BusinessData[];
-  meta: {
-    sources: string[];
-    query: string;
-    location?: string;
-    timestamp: string;
-    execution_id: string;
-    total_count: number;
-    page: number;
-    limit: number;
-    total_pages: number;
-    google_sheets_url?: string;
-  };
+  message?: string;
+  errorCode?: string;
 }
 
-/**
- * Error response for a failed scraping operation
- */
-export interface ErrorResponse {
-  error: string;
-  error_code: string;
-  timestamp: string;
-  request_id: string;
-  details?: Record<string, any>;
+export interface BusinessLocation {
+  lat: number;
+  lng: number;
+  formattedAddress?: string;
+}
+
+export interface SearchParams {
+  query?: string;
+  industry?: string;
+  location?: string;
+  position?: string;
 }
