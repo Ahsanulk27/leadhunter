@@ -38,8 +38,19 @@ export default function LeadFinder() {
         
         // Check if the response contains an error
         if (!response.ok || (data && data.error)) {
-          const errorMessage = data.message || "Failed to search for leads";
-          throw new Error(errorMessage);
+          // Handle specific API errors
+          if (data.error && data.error.code === 'PLACES_API_REQUEST_DENIED') {
+            throw new Error(
+              "Google Places API access is currently unavailable. Please try again later or contact support for assistance."
+            );
+          } else if (data.error && data.error.code === 'PLACES_API_QUERY_LIMIT') {
+            throw new Error(
+              "We've reached our daily search limit. Please try again tomorrow."
+            );
+          } else {
+            const errorMessage = data.message || data.error?.message || "Failed to search for leads";
+            throw new Error(errorMessage);
+          }
         }
         
         return data;
@@ -138,13 +149,27 @@ export default function LeadFinder() {
                 <h3 className="text-sm font-medium text-red-800">Search Error</h3>
                 <div className="mt-2 text-sm text-red-700">
                   <p>{searchError}</p>
-                  <p className="mt-2">
-                    <strong>Tips:</strong> For best results, try searching for a specific company name that has publicly available information.
-                    Our system only returns 100% real data from publicly available sources.
-                  </p>
-                  <p className="mt-2">
-                    Example searches: "Google in California", "Microsoft in Seattle", "Apple Inc"
-                  </p>
+                  {searchError.includes("Google Places API") ? (
+                    <div>
+                      <p className="mt-2">
+                        <strong>API Access Issue:</strong> We're currently experiencing an issue with our data provider connection. 
+                        The application can only show real business data from Google Places API, and this service is temporarily unavailable.
+                      </p>
+                      <p className="mt-2">
+                        <strong>What you can do:</strong> Please try again later when our API access has been restored.
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="mt-2">
+                        <strong>Tips:</strong> For best results, try searching for a specific company name that has publicly available information.
+                        Our system only returns 100% real data from publicly available sources.
+                      </p>
+                      <p className="mt-2">
+                        Example searches: "Google in California", "Microsoft in Seattle", "Apple Inc"
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
