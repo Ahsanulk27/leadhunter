@@ -59,10 +59,10 @@ export class BulkLeadService {
         
         // Filter businesses if needed
         if (onlyDecisionMakers) {
-          result.businesses.forEach(business => {
+          result.businesses.forEach((business: BusinessData) => {
             if (business.contacts && business.contacts.length > 0) {
               // Keep only decision makers or primary contacts
-              business.contacts = business.contacts.filter(contact => 
+              business.contacts = business.contacts.filter((contact: { isDecisionMaker?: boolean; isPrimary?: boolean }) => 
                 contact.isDecisionMaker === true || contact.isPrimary === true
               );
             }
@@ -71,7 +71,7 @@ export class BulkLeadService {
         
         // Count contacts
         let locationContactCount = 0;
-        result.businesses.forEach(business => {
+        result.businesses.forEach((business: BusinessData) => {
           if (business.contacts) {
             locationContactCount += business.contacts.length;
             totalContacts += business.contacts.length;

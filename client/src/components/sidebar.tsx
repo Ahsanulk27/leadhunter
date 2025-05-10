@@ -6,7 +6,8 @@ import {
   History, 
   BarChart, 
   Settings, 
-  Database 
+  Database,
+  Globe
 } from "lucide-react";
 
 export default function Sidebar() {

@@ -96,51 +96,40 @@ export function registerBulkLeadRoutes(app: Express, googlePlacesService: Google
       
       console.log(`📊 Bulk Lead Generation: Searching for "${industry}" in ${locationsToSearch.length} locations`);
       
-      // Process each location and collect results
-      const locationResults = [];
-      const allBusinesses: BusinessData[] = [];
-      let totalContacts = 0;
+      // Map location codes to full location names for the search
+      const locationNames = locationsToSearch.map(
+        (locationCode: string) => LOCATION_MAP[locationCode] || locationCode.replace(/_/g, ' ')
+      );
       
-      for (const locationCode of locationsToSearch) {
-        const locationName = LOCATION_MAP[locationCode] || locationCode.replace(/_/g, ' ');
-        
-        console.log(`📍 Processing location: ${locationName}`);
-        
-        // Search for businesses in this location
-        const data: ScrapingResult = await googlePlacesService.searchBusinesses({
-          query: industry,
-          location: locationName,
-          limit: maxPerLocation
-        });
-        
-        // Count contacts
-        let locationContactCount = 0;
-        data.businesses.forEach(business => {
-          if (business.contacts) {
-            locationContactCount += business.contacts.length;
-            totalContacts += business.contacts.length;
-          }
-        });
-        
-        // Store location results
-        locationResults.push({
-          location: locationCode,
-          businessCount: data.businesses.length,
-          contactCount: locationContactCount
-        });
-        
-        // Add businesses to the combined list
-        allBusinesses.push(...data.businesses);
-      }
+      // Always include "businesses" or "companies" in the industry search to improve results
+      const searchQuery = industry.toLowerCase().includes('business') || 
+                         industry.toLowerCase().includes('compan') ? 
+                         industry : `${industry} businesses`;
       
-      // Return the combined results
+      // Use our bulk lead service to handle the search across all locations
+      const result = await bulkLeadService.generateLeadsAcrossLocations(
+        searchQuery,
+        locationNames,
+        maxPerLocation,
+        true // Always get decision makers for industry searches
+      );
+      
+      // Format the location results to use the location codes rather than the full names
+      const formattedLocationResults = result.locationResults.map((locResult, index) => ({
+        location: locationsToSearch[index],
+        businessCount: locResult.businessCount,
+        contactCount: locResult.contactCount
+      }));
+      
+      // Return the results
       return res.json({
-        success: true,
-        totalLocations: locationsToSearch.length,
-        totalBusinesses: allBusinesses.length,
-        totalContacts,
-        locationResults,
-        businesses: allBusinesses
+        success: result.success,
+        totalLocations: result.totalLocations,
+        totalBusinesses: result.totalBusinesses,
+        totalContacts: result.totalContacts,
+        locationResults: formattedLocationResults,
+        businesses: result.businesses,
+        error: result.error
       });
     } catch (error) {
       console.error('Error in bulk lead generation:', error);
@@ -198,63 +187,35 @@ export function registerBulkLeadRoutes(app: Express, googlePlacesService: Google
       
       console.log(`📊 Bulk Lead Generation: Searching for "${query}" in ${locationsToSearch.length} locations`);
       
-      // Process each location and collect results
-      const locationResults = [];
-      const allBusinesses: BusinessData[] = [];
-      let totalContacts = 0;
+      // Map location codes to full location names for the search
+      const locationNames = locationsToSearch.map(
+        (locationCode: string) => LOCATION_MAP[locationCode] || locationCode.replace(/_/g, ' ')
+      );
       
-      for (const locationCode of locationsToSearch) {
-        const locationName = LOCATION_MAP[locationCode] || locationCode.replace(/_/g, ' ');
-        
-        console.log(`📍 Processing location: ${locationName}`);
-        
-        // Search for businesses in this location
-        const data: ScrapingResult = await googlePlacesService.searchBusinesses({
-          query,
-          location: locationName,
-          limit: maxPerLocation
-        });
-        
-        // Filter contacts if onlyDecisionMakers is true
-        if (onlyDecisionMakers) {
-          data.businesses.forEach(business => {
-            if (business.contacts && business.contacts.length > 0) {
-              // Keep only decision makers
-              business.contacts = business.contacts.filter(contact => 
-                contact.isDecisionMaker === true || contact.isPrimary === true
-              );
-            }
-          });
-        }
-        
-        // Count contacts
-        let locationContactCount = 0;
-        data.businesses.forEach(business => {
-          if (business.contacts) {
-            locationContactCount += business.contacts.length;
-            totalContacts += business.contacts.length;
-          }
-        });
-        
-        // Store location results
-        locationResults.push({
-          location: locationCode,
-          businessCount: data.businesses.length,
-          contactCount: locationContactCount
-        });
-        
-        // Add businesses to the combined list
-        allBusinesses.push(...data.businesses);
-      }
+      // Use our new bulk lead service to handle the search across all locations
+      const result = await bulkLeadService.generateLeadsAcrossLocations(
+        query,
+        locationNames,
+        maxPerLocation,
+        onlyDecisionMakers
+      );
       
-      // Return the combined results
+      // Format the location results to use the location codes rather than the full names
+      const formattedLocationResults = result.locationResults.map((locResult, index) => ({
+        location: locationsToSearch[index],
+        businessCount: locResult.businessCount,
+        contactCount: locResult.contactCount
+      }));
+      
+      // Return the results
       return res.json({
-        success: true,
-        totalLocations: locationsToSearch.length,
-        totalBusinesses: allBusinesses.length,
-        totalContacts,
-        locationResults,
-        businesses: allBusinesses
+        success: result.success,
+        totalLocations: result.totalLocations,
+        totalBusinesses: result.totalBusinesses,
+        totalContacts: result.totalContacts,
+        locationResults: formattedLocationResults,
+        businesses: result.businesses,
+        error: result.error
       });
     } catch (error) {
       console.error('Error in custom bulk lead generation:', error);
