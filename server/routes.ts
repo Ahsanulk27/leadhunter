@@ -12,6 +12,41 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 
+// Helper function to calculate data quality score based on completeness of business data
+function calculateDataQualityScore(businesses: BusinessData[]): number {
+  if (!businesses || businesses.length === 0) return 0;
+  
+  let totalScore = 0;
+  
+  for (const business of businesses) {
+    let businessScore = 0;
+    // Essential data presence
+    if (business.name) businessScore += 1;
+    if (business.address) businessScore += 1;
+    if (business.phoneNumber) businessScore += 2; // Higher weight for contact methods
+    if (business.website) businessScore += 2;
+    if (business.category) businessScore += 1;
+    
+    // Contact data quality
+    if (business.contacts && business.contacts.length > 0) {
+      businessScore += Math.min(business.contacts.length, 5); // More contacts = higher score, max 5 points
+      
+      // Check if we have decision makers
+      const hasDecisionMakers = business.contacts.some(c => c.isDecisionMaker);
+      if (hasDecisionMakers) businessScore += 3; // Bonus for having decision makers
+    }
+    
+    totalScore += businessScore;
+  }
+  
+  // Calculate average score per business and normalize to 0-100 scale
+  const maxPossibleScore = 15; // Maximum possible score per business
+  const averageScore = totalScore / businesses.length;
+  const normalizedScore = Math.min(Math.round((averageScore / maxPossibleScore) * 100), 100);
+  
+  return normalizedScore;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Define API routes
   const apiRouter = app.use("/api", async (req, res, next) => {
@@ -654,7 +689,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Request up to 100 results for comprehensive data
       const result = await googlePlacesService.searchBusinesses(query, location, 100);
       
-      // Format the results in the expected ScrapingResult format
+      // Calculate data quality score
+      const dataQualityScore = calculateDataQualityScore(result.businesses);
+      
+      // Format the results in the expected ScrapingResult format with enhanced metadata
       const scrapingResult: ScrapingResult = {
         businesses: result.businesses,
         meta: {
@@ -668,20 +706,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
           limit: limit,
           total_pages: Math.ceil(result.businesses.length / limit),
           // Include the detailed metadata about the fetching process from the Google Places service
-          ...(result.meta || {}),
-          total_contacts_generated: result.businesses.reduce((count, b) => count + (b.contacts?.length || 0), 0)
-        }
+          ...(result.meta || {})
+        } as any // Cast to any to bypass type checking for additional properties
       };
+      
+      // Add additional metadata properties as 'any' to avoid type errors
+      (scrapingResult.meta as any).total_contacts_generated = result.businesses.reduce((count, b) => count + (b.contacts?.length || 0), 0);
+      (scrapingResult.meta as any).businesses_with_contacts = result.businesses.filter(b => (b.contacts?.length || 0) > 0).length;
+      (scrapingResult.meta as any).businesses_without_contacts = result.businesses.filter(b => (b.contacts?.length || 0) === 0).length;
+      (scrapingResult.meta as any).businesses_with_phone = result.businesses.filter(b => b.phoneNumber && b.phoneNumber.length > 0).length;
+      (scrapingResult.meta as any).businesses_with_website = result.businesses.filter(b => b.website && b.website.length > 0).length;
+      (scrapingResult.meta as any).data_quality_score = dataQualityScore;
+      (scrapingResult.meta as any).api_quota_status = result.meta?.quotaStatus || 'unknown';
       
       // Add these properties to help with type checking in the rest of the code
       (scrapingResult as any).totalCount = result.businesses.length;
       (scrapingResult as any).sources = result.sources;
       
-      // Log detailed metrics about the search operation
+      // Log enhanced detailed metrics about the search operation
       console.log(`📊 [${executionId}] Search metrics: ${result.businesses.length} businesses found`);
       if (result.meta) {
         console.log(`📊 [${executionId}] API metrics: ${result.meta.totalProcessedBusinesses}/${result.meta.totalResultsFound} businesses processed from ${result.meta.pagesRetrieved} pages`);
         console.log(`📊 [${executionId}] Generated ${result.meta.totalContactsGenerated} total contacts`);
+        console.log(`📊 [${executionId}] Data quality score: ${dataQualityScore}/100`);
+        
+        // Log validation metrics
+        const businessesWithNoContacts = (scrapingResult.meta as any).businesses_without_contacts || 0;
+        if (businessesWithNoContacts > 0) {
+          console.log(`⚠️ [${executionId}] ${businessesWithNoContacts} businesses had no extractable contacts`);
+        }
+        
+        const businessesWithoutContactMethods = result.businesses.filter(b => 
+          (!b.phoneNumber || b.phoneNumber.length === 0) && (!b.website || b.website.length === 0)
+        ).length;
+        if (businessesWithoutContactMethods > 0) {
+          console.log(`⚠️ [${executionId}] ${businessesWithoutContactMethods} businesses had no contact methods (phone/website)`);
+        }
+        
+        // Log quota status
+        console.log(`📊 [${executionId}] API quota status: ${(result.meta as any).quotaStatus || 'unknown'}`);
       }
       
       // Calculate execution time
