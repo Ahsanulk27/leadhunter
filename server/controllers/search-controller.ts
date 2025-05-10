@@ -1,303 +1,355 @@
 /**
- * Search controller to coordinate scraping from multiple sources and implement pagination
+ * SearchController coordinates business data scraping from multiple sources
+ * Implements retry logic, error handling, and result aggregation
  */
 
-import { BusinessData, ScrapingResult, SearchParams, ErrorResponse } from '../models/business-data';
-import { googleMapsScraper } from '../api/google-maps-scraper';
-import { yelpScraper } from '../api/yelp-scraper';
-import { yellowPagesScraper } from '../api/yellow-pages-scraper';
+import { v4 as uuidv4 } from 'uuid';
+import { BusinessData, ScrapingResult, ErrorResponse, SearchParams, ScrapeExecutionLog, SearchControllerOptions } from '../models/business-data';
+import { cheerioScraper } from '../api/cheerio-scraper';
+import { googleSheetsService } from '../api/google-sheets-service';
+import { waitRandomTime } from '../api/scraper-utils';
 import * as fs from 'fs';
 import * as path from 'path';
-import { randomBytes } from 'crypto';
-
-interface ScraperFunction {
-  (query: string, location?: string, executionId?: string, executionLog?: any): Promise<{ businesses: BusinessData[], totalResults?: number }>;
-}
 
 export class SearchController {
-  private logsDir = path.join(process.cwd(), 'logs');
+  private logsDir: string;
+  private executionLogsDir: string;
   
   constructor() {
-    // Ensure logs directory exists
+    // Create logs directory if it doesn't exist
+    this.logsDir = path.join(process.cwd(), 'logs');
+    this.executionLogsDir = path.join(this.logsDir, 'executions');
+    
     if (!fs.existsSync(this.logsDir)) {
       fs.mkdirSync(this.logsDir, { recursive: true });
     }
+    if (!fs.existsSync(this.executionLogsDir)) {
+      fs.mkdirSync(this.executionLogsDir, { recursive: true });
+    }
   }
-
+  
   /**
-   * Search for business data from multiple sources with pagination
+   * Search for business data from multiple sources
    */
-  async searchBusinessData(params: SearchParams): Promise<ScrapingResult | ErrorResponse> {
-    const {
-      industry,
-      location,
-      companyName,
-      page = 1,
-      limit = 20,
-      executionId: providedExecutionId,
-      executionLog: providedExecutionLog
-    } = params;
+  async searchBusinessData(
+    params: SearchParams,
+    options: SearchControllerOptions = {}
+  ): Promise<ScrapingResult | ErrorResponse> {
+    const executionId = uuidv4();
+    const startTime = Date.now();
+    const query = params.query || params.industry || '';
+    const location = params.location || '';
+    const page = params.page || 1;
+    const limit = params.limit || 20;
     
-    // Generate execution ID if not provided
-    const executionId = providedExecutionId || `search-${Date.now()}-${randomBytes(4).toString('hex')}`;
-    
-    // Initialize execution log
-    const executionLog = providedExecutionLog || {
-      execution_id: executionId,
-      timestamp: new Date().toISOString(),
-      query_params: { industry, location, companyName, page, limit },
-      scraping_attempts: [],
-      scraping_results: [],
-      error_details: []
-    };
-    
-    const executionStartTime = Date.now();
-    
-    // Determine search query - prefer company name, fallback to industry
-    const searchQuery = companyName || industry || '';
-    if (!searchQuery) {
+    if (!query) {
       return {
-        error: 'No search query provided',
-        details: 'Please provide either an industry or a company name to search for',
-        executionId,
-        executionDate: new Date().toISOString()
+        error: 'Query parameter is required',
+        error_code: 'MISSING_QUERY',
+        timestamp: new Date().toISOString(),
+        request_id: executionId
       };
     }
     
-    console.log(`🔍 SearchController: Searching for "${searchQuery}" in "${location || 'any location'}" (page ${page}, limit ${limit})`);
+    // Initialize execution log
+    const executionLog: ScrapeExecutionLog = {
+      execution_id: executionId,
+      query,
+      location,
+      timestamp: new Date().toISOString(),
+      status: 'running',
+      sources: ['google', 'yelp', 'yellowpages'],
+      success_count: 0,
+      error_count: 0,
+      total_businesses_found: 0,
+      scraping_attempts: [],
+      error_details: []
+    };
     
-    // Set up scraping pipeline
-    const scrapers: { name: string; fn: ScraperFunction }[] = [
-      { name: 'google-maps', fn: googleMapsScraper.searchBusinesses.bind(googleMapsScraper) },
-      { name: 'yelp', fn: yelpScraper.searchBusinesses.bind(yelpScraper) },
-      { name: 'yellow-pages', fn: yellowPagesScraper.searchBusinesses.bind(yellowPagesScraper) }
-    ];
-    
-    // Log path for this execution
-    const logFilePath = path.join(this.logsDir, `search-${executionId}.json`);
+    console.log(`🔍 SearchController: Starting search for "${query}" ${location ? `in ${location}` : ''} (Execution ID: ${executionId})`);
     
     try {
-      // Run scrapers in parallel
-      const scrapingResults = await Promise.allSettled(
-        scrapers.map(scraper => 
-          scraper.fn(searchQuery, location, `${executionId}-${scraper.name}`, executionLog)
-          .catch(error => {
-            console.error(`❌ Error in ${scraper.name} scraper:`, error);
-            return { businesses: [] };
-          })
-        )
-      );
+      // Perform scraping from multiple sources in parallel
+      const sourceResults = await Promise.allSettled([
+        cheerioScraper.searchGoogleBusinesses(query, location, { 
+          executionId, 
+          executionLog,
+          maxRetries: options.maxSourceRetries || 3,
+          timeout: options.sourceTimeout || 30000,
+          logRequests: options.logExecutionDetails || false
+        }),
+        cheerioScraper.searchYelpBusinesses(query, location, { 
+          executionId, 
+          executionLog,
+          maxRetries: options.maxSourceRetries || 3,
+          timeout: options.sourceTimeout || 30000,
+          logRequests: options.logExecutionDetails || false
+        }),
+        cheerioScraper.searchYellowPagesBusinesses(query, location, { 
+          executionId, 
+          executionLog,
+          maxRetries: options.maxSourceRetries || 3,
+          timeout: options.sourceTimeout || 30000,
+          logRequests: options.logExecutionDetails || false
+        })
+      ]);
       
-      // Collect all successful business data
+      // Process results
       const allBusinesses: BusinessData[] = [];
+      const sources: string[] = [];
+      let successCount = 0;
       
-      scrapingResults.forEach((result, index) => {
-        if (result.status === 'fulfilled' && result.value.businesses.length > 0) {
-          const scraperName = scrapers[index].name;
-          console.log(`✅ ${scraperName} found ${result.value.businesses.length} results`);
+      // Google results
+      if (sourceResults[0].status === 'fulfilled' && sourceResults[0].value.length > 0) {
+        allBusinesses.push(...sourceResults[0].value);
+        sources.push('google');
+        successCount++;
+      } else {
+        console.error(`❌ google-maps failed or returned no results`);
+        executionLog.error_details.push({
+          source: 'google',
+          error: sourceResults[0].status === 'rejected' ? sourceResults[0].reason : 'No results found',
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Yelp results
+      if (sourceResults[1].status === 'fulfilled' && sourceResults[1].value.length > 0) {
+        allBusinesses.push(...sourceResults[1].value);
+        sources.push('yelp');
+        successCount++;
+      } else {
+        console.error(`❌ yelp failed or returned no results`);
+        executionLog.error_details.push({
+          source: 'yelp',
+          error: sourceResults[1].status === 'rejected' ? sourceResults[1].reason : 'No results found',
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Yellow Pages results
+      if (sourceResults[2].status === 'fulfilled' && sourceResults[2].value.length > 0) {
+        allBusinesses.push(...sourceResults[2].value);
+        sources.push('yellowpages');
+        successCount++;
+      } else {
+        console.error(`❌ yellow-pages failed or returned no results`);
+        executionLog.error_details.push({
+          source: 'yellowpages',
+          error: sourceResults[2].status === 'rejected' ? sourceResults[2].reason : 'No results found',
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Update execution log
+      executionLog.success_count = successCount;
+      executionLog.error_count = 3 - successCount;
+      executionLog.total_businesses_found = allBusinesses.length;
+      
+      // Handle case with no results from any source
+      if (allBusinesses.length === 0) {
+        console.error(`❌ SearchController: No businesses found from any source`);
+        
+        // Attempt self-recovery by waiting and retrying with different user agents
+        if (executionLog.error_count > 0 && !params.hasOwnProperty('_retry')) {
+          console.log(`🔄 SearchController: Attempting recovery with retry...`);
           
-          // Add all businesses from this scraper
-          allBusinesses.push(...result.value.businesses);
-        } else {
-          console.log(`❌ ${scrapers[index].name} failed or returned no results`);
+          // Wait a bit longer between retries
+          await waitRandomTime(3000, 5000);
+          
+          // Use recursion with a retry flag to prevent infinite loops
+          return this.searchBusinessData({ 
+            ...params, 
+            _retry: true 
+          }, {
+            ...options,
+            maxSourceRetries: (options.maxSourceRetries || 3) + 1
+          });
+        }
+        
+        executionLog.status = 'failed';
+        executionLog.error = 'No businesses found from any source';
+        executionLog.completion_time = new Date().toISOString();
+        executionLog.execution_time_ms = Date.now() - startTime;
+        
+        this.saveExecutionLog(executionLog);
+        
+        return {
+          error: 'No businesses found',
+          error_code: 'NO_RESULTS',
+          timestamp: new Date().toISOString(),
+          request_id: executionId,
+          details: {
+            sources_attempted: sources,
+            execution_id: executionId
+          }
+        };
+      }
+      
+      // Basic deduplication by business name
+      const uniqueBusinessMap = new Map<string, BusinessData>();
+      allBusinesses.forEach(business => {
+        const key = `${business.name.toLowerCase()}-${business.phoneNumber.replace(/\D/g, '')}`;
+        
+        // If business doesn't exist or this one has more data, use this one
+        if (!uniqueBusinessMap.has(key) || 
+            (business.website && !uniqueBusinessMap.get(key)!.website) ||
+            (business.contacts.length > uniqueBusinessMap.get(key)!.contacts.length)) {
+          uniqueBusinessMap.set(key, business);
         }
       });
       
-      // Remove duplicates based on name + phone number or name + address
-      const uniqueBusinesses = this.removeDuplicates(allBusinesses);
-      
-      // If we have no data from any source, return error
-      if (uniqueBusinesses.length === 0) {
-        console.log(`❌ SearchController: No businesses found from any source`);
-        const error: ErrorResponse = {
-          error: "No real business data found after live attempts.",
-          details: "All scraping attempts failed to return any business data.",
-          executionId,
-          executionDate: new Date().toISOString()
-        };
-        
-        // Log the execution for diagnostics
-        fs.writeFileSync(logFilePath, JSON.stringify({
-          error,
-          executionLog
-        }, null, 2));
-        
-        return error;
-      }
+      // Convert map back to array
+      const uniqueBusinesses = Array.from(uniqueBusinessMap.values());
       
       // Apply pagination
       const totalResults = uniqueBusinesses.length;
       const totalPages = Math.ceil(totalResults / limit);
       const startIndex = (page - 1) * limit;
-      const endIndex = startIndex + limit;
+      const endIndex = Math.min(startIndex + limit, totalResults);
       const paginatedBusinesses = uniqueBusinesses.slice(startIndex, endIndex);
       
-      // Prepare response
-      const response: ScrapingResult = {
+      // Export to Google Sheets if API key is available
+      let sheetsUrl = '';
+      try {
+        if (process.env.GOOGLE_API_KEY) {
+          console.log(`📊 SearchController: Exporting ${uniqueBusinesses.length} businesses to Google Sheets...`);
+          const sheetsResult = await googleSheetsService.createSheetWithBusinessData(
+            `${query} ${location}`.trim(),
+            uniqueBusinesses
+          );
+          
+          if (sheetsResult.success && sheetsResult.spreadsheetUrl) {
+            sheetsUrl = sheetsResult.spreadsheetUrl;
+            console.log(`📊 SearchController: Successfully exported to Google Sheets: ${sheetsUrl}`);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error exporting to Google Sheets:', error);
+      }
+      
+      // Update execution log with final status
+      executionLog.status = 'completed';
+      executionLog.completion_time = new Date().toISOString();
+      executionLog.execution_time_ms = Date.now() - startTime;
+      this.saveExecutionLog(executionLog);
+      
+      // Return the results
+      const result: ScrapingResult = {
         businesses: paginatedBusinesses,
-        page,
-        limit,
-        totalResults,
-        totalPages,
-        executionTimeMs: Date.now() - executionStartTime,
-        sources: scrapers.map(s => s.name),
-        query: searchQuery,
-        location: location,
-        executionDate: new Date().toISOString(),
-        executionId
+        meta: {
+          sources,
+          query,
+          location,
+          timestamp: new Date().toISOString(),
+          execution_id: executionId,
+          total_count: totalResults,
+          page,
+          limit,
+          total_pages: totalPages
+        },
+        diagnostics: {
+          execution_time_ms: Date.now() - startTime,
+          success_rate: successCount / 3,
+          error_rate: (3 - successCount) / 3,
+          error_details: executionLog.error_details
+        }
       };
       
-      // Log the execution for diagnostics
-      executionLog.final_result = {
-        total_businesses: totalResults,
-        paginated_count: paginatedBusinesses.length,
-        execution_time_ms: response.executionTimeMs
-      };
+      // Add Google Sheets URL if available
+      if (sheetsUrl) {
+        result.meta['google_sheets_url'] = sheetsUrl;
+      }
       
-      fs.writeFileSync(logFilePath, JSON.stringify({
-        result: response,
-        executionLog
-      }, null, 2));
-      
-      return response;
-      
+      return result;
     } catch (error) {
-      console.error('❌ SearchController error:', error);
+      console.error(`❌ SearchController Error:`, error);
       
-      const errorResponse: ErrorResponse = {
-        error: "Search operation failed",
-        details: (error as Error).message,
-        executionId,
-        executionDate: new Date().toISOString()
+      // Update execution log with error
+      executionLog.status = 'failed';
+      executionLog.error = (error as Error).message;
+      executionLog.completion_time = new Date().toISOString();
+      executionLog.execution_time_ms = Date.now() - startTime;
+      this.saveExecutionLog(executionLog);
+      
+      return {
+        error: 'Failed to search for businesses',
+        error_code: 'SEARCH_ERROR',
+        timestamp: new Date().toISOString(),
+        request_id: executionId,
+        details: {
+          message: (error as Error).message,
+          execution_id: executionId
+        }
       };
-      
-      // Log the error for diagnostics
-      executionLog.error = {
-        message: (error as Error).message,
-        stack: (error as Error).stack
-      };
-      
-      fs.writeFileSync(logFilePath, JSON.stringify({
-        error: errorResponse,
-        executionLog
-      }, null, 2));
-      
-      return errorResponse;
     }
   }
-
+  
   /**
-   * Remove duplicate businesses based on name + phone or name + address
+   * Save execution log to file
    */
-  private removeDuplicates(businesses: BusinessData[]): BusinessData[] {
-    const uniqueMap = new Map<string, BusinessData>();
-    
-    businesses.forEach(business => {
-      // Create unique keys based on name + phone or name + address
-      const nameNormalized = this.normalizeString(business.name);
-      const phoneNormalized = this.normalizeString(business.phoneNumber);
-      const addressNormalized = this.normalizeString(business.address);
+  private saveExecutionLog(log: ScrapeExecutionLog): string {
+    try {
+      const filename = `${log.execution_id}.json`;
+      const filepath = path.join(this.executionLogsDir, filename);
       
-      // Try to create a unique identifier
-      let key = '';
-      if (nameNormalized && phoneNormalized) {
-        key = `${nameNormalized}-${phoneNormalized}`;
-      } else if (nameNormalized && addressNormalized) {
-        key = `${nameNormalized}-${addressNormalized}`;
-      } else {
-        // If we don't have enough info to de-duplicate, use the whole business as a key
-        key = JSON.stringify(business);
+      fs.writeFileSync(filepath, JSON.stringify(log, null, 2));
+      return filepath;
+    } catch (error) {
+      console.error(`❌ Error saving execution log:`, error);
+      return '';
+    }
+  }
+  
+  /**
+   * Get execution log by ID
+   */
+  async getExecutionLog(executionId: string): Promise<ScrapeExecutionLog | null> {
+    try {
+      const filepath = path.join(this.executionLogsDir, `${executionId}.json`);
+      
+      if (fs.existsSync(filepath)) {
+        const logData = fs.readFileSync(filepath, 'utf8');
+        return JSON.parse(logData) as ScrapeExecutionLog;
       }
       
-      // Only add if we don't already have this business, or if this one has more details
-      const existingBusiness = uniqueMap.get(key);
-      if (!existingBusiness || this.hasMoreDetails(business, existingBusiness)) {
-        
-        // If we already have a business but from a different source, merge the contacts
-        if (existingBusiness) {
-          const mergedContacts = [...existingBusiness.contacts];
-          
-          // Add new contacts that aren't duplicates
-          business.contacts.forEach(newContact => {
-            const isDuplicate = mergedContacts.some(existingContact => 
-              this.normalizeString(existingContact.name) === this.normalizeString(newContact.name)
-            );
-            
-            if (!isDuplicate) {
-              mergedContacts.push(newContact);
-            }
-          });
-          
-          // Create a merged business record
-          business = {
-            ...business,
-            contacts: mergedContacts,
-            // Preserve IDs if they exist
-            place_id: business.place_id || existingBusiness.place_id,
-            yelp_url: business.yelp_url || existingBusiness.yelp_url,
-            yellow_pages_url: business.yellow_pages_url || existingBusiness.yellow_pages_url
-          };
+      return null;
+    } catch (error) {
+      console.error(`❌ Error reading execution log:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Get recent execution logs
+   */
+  async getRecentExecutionLogs(limit = 10): Promise<ScrapeExecutionLog[]> {
+    try {
+      const files = fs.readdirSync(this.executionLogsDir)
+        .filter(file => file.endsWith('.json'))
+        .sort((a, b) => {
+          const statA = fs.statSync(path.join(this.executionLogsDir, a));
+          const statB = fs.statSync(path.join(this.executionLogsDir, b));
+          return statB.mtime.getTime() - statA.mtime.getTime();
+        })
+        .slice(0, limit);
+      
+      const logs: ScrapeExecutionLog[] = [];
+      
+      for (const file of files) {
+        try {
+          const data = fs.readFileSync(path.join(this.executionLogsDir, file), 'utf8');
+          logs.push(JSON.parse(data) as ScrapeExecutionLog);
+        } catch (error) {
+          console.error(`❌ Error reading log file ${file}:`, error);
         }
-        
-        uniqueMap.set(key, business);
       }
-    });
-    
-    return Array.from(uniqueMap.values());
-  }
-
-  /**
-   * Check if one business record has more details than another
-   */
-  private hasMoreDetails(b1: BusinessData, b2: BusinessData): boolean {
-    // Create a simple score based on field presence
-    const score1 = this.calculateDetailScore(b1);
-    const score2 = this.calculateDetailScore(b2);
-    
-    return score1 > score2;
-  }
-
-  /**
-   * Calculate a detail score for a business based on available fields
-   */
-  private calculateDetailScore(business: BusinessData): number {
-    let score = 0;
-    
-    // Basic info
-    if (business.name) score += 1;
-    if (business.address) score += 1;
-    if (business.phoneNumber) score += 1;
-    if (business.website) score += 2;
-    
-    // Industry and location
-    if (business.industry) score += 1;
-    if (business.location) score += 1;
-    if (business.size && business.size !== 'Unknown') score += 1;
-    
-    // Contacts
-    score += business.contacts.length * 3;
-    
-    // Additional data
-    if (business.place_id) score += 1;
-    if (business.yelp_url) score += 1;
-    if (business.yellow_pages_url) score += 1;
-    if (business.google_rating) score += 1;
-    if (business.review_count) score += 1;
-    
-    // If we have types, that's more detailed information
-    if (business.types && business.types.length > 0) score += 1;
-    if (business.vicinity) score += 1;
-    if (business.formatted_address) score += 1;
-    
-    return score;
-  }
-
-  /**
-   * Helper function to normalize strings for comparison
-   */
-  private normalizeString(str: string): string {
-    if (!str) return '';
-    return str.toLowerCase().replace(/[^a-z0-9]/g, '');
+      
+      return logs;
+    } catch (error) {
+      console.error(`❌ Error getting recent execution logs:`, error);
+      return [];
+    }
   }
 }
 
