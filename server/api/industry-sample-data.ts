@@ -498,11 +498,377 @@ export function getPropertyManagementBusinesses(count: number = 10): BusinessDat
 }
 
 /**
+ * Get sample software development companies
+ */
+export function getSoftwareCompanies(count: number = 10): BusinessData[] {
+  const softwareCompanies: BusinessData[] = [
+    {
+      id: "sw-001",
+      name: "TechFusion Solutions",
+      description: "Enterprise software development and IT consulting services.",
+      address: "555 Broadway, New York, NY 10012",
+      phone: "(212) 555-7890",
+      website: "https://techfusion.example.com",
+      email: "info@techfusion.example.com",
+      category: "Software Development",
+      rating: 4.7,
+      reviewCount: 89,
+      imageUrl: "https://via.placeholder.com/150",
+      size: "50-100 employees",
+      yearFounded: 2011,
+      contacts: [
+        {
+          id: "sw-001-c1",
+          name: "Michael Chen",
+          title: "Chief Technology Officer",
+          phone: "(212) 555-7891",
+          email: "m.chen@techfusion.example.com",
+          linkedin: "linkedin.com/in/michaelchen",
+          relevanceScore: 95
+        },
+        {
+          id: "sw-001-c2",
+          name: "Sarah Johnson",
+          title: "VP of Business Development",
+          phone: "(212) 555-7892",
+          email: "s.johnson@techfusion.example.com",
+          linkedin: "linkedin.com/in/sarahjohnson",
+          relevanceScore: 90
+        }
+      ]
+    },
+    {
+      id: "sw-002",
+      name: "Quantum Code Labs",
+      description: "Custom software development focusing on AI and machine learning applications.",
+      address: "123 5th Avenue, New York, NY 10003",
+      phone: "(212) 555-4567",
+      website: "https://quantumcode.example.com",
+      email: "hello@quantumcode.example.com",
+      category: "Software Development",
+      rating: 4.9,
+      reviewCount: 65,
+      imageUrl: "https://via.placeholder.com/150",
+      size: "25-50 employees",
+      yearFounded: 2015,
+      contacts: [
+        {
+          id: "sw-002-c1",
+          name: "David Park",
+          title: "CEO & Founder",
+          phone: "(212) 555-4568",
+          email: "d.park@quantumcode.example.com",
+          linkedin: "linkedin.com/in/davidpark",
+          relevanceScore: 98
+        },
+        {
+          id: "sw-002-c2",
+          name: "Ananya Patel",
+          title: "Head of Client Relations",
+          phone: "(212) 555-4569",
+          email: "a.patel@quantumcode.example.com",
+          linkedin: "linkedin.com/in/ananyapatel",
+          relevanceScore: 85
+        }
+      ]
+    },
+    {
+      id: "sw-003",
+      name: "Nexus Digital Systems",
+      description: "Full-stack development specializing in SaaS platforms and mobile applications.",
+      address: "789 Madison Ave, New York, NY 10065",
+      phone: "(212) 555-3210",
+      website: "https://nexusdigital.example.com",
+      email: "contact@nexusdigital.example.com",
+      category: "Software Development",
+      rating: 4.5,
+      reviewCount: 112,
+      imageUrl: "https://via.placeholder.com/150",
+      size: "100-250 employees",
+      yearFounded: 2008,
+      contacts: [
+        {
+          id: "sw-003-c1",
+          name: "Jessica Wong",
+          title: "Chief Product Officer",
+          phone: "(212) 555-3211",
+          email: "j.wong@nexusdigital.example.com",
+          linkedin: "linkedin.com/in/jessicawong",
+          relevanceScore: 92
+        },
+        {
+          id: "sw-003-c2",
+          name: "Robert Garcia",
+          title: "VP of Engineering",
+          phone: "(212) 555-3212",
+          email: "r.garcia@nexusdigital.example.com",
+          linkedin: "linkedin.com/in/robertgarcia",
+          relevanceScore: 88
+        }
+      ]
+    },
+    {
+      id: "sw-004",
+      name: "ByteCraft Technologies",
+      description: "Specialized in fintech and blockchain development solutions.",
+      address: "321 Park Avenue, New York, NY 10022",
+      phone: "(212) 555-9876",
+      website: "https://bytecraft.example.com",
+      email: "info@bytecraft.example.com",
+      category: "Software Development",
+      rating: 4.6,
+      reviewCount: 78,
+      imageUrl: "https://via.placeholder.com/150",
+      size: "25-50 employees",
+      yearFounded: 2016,
+      contacts: [
+        {
+          id: "sw-004-c1",
+          name: "Marcus Williams",
+          title: "Director of Engineering",
+          phone: "(212) 555-9877",
+          email: "m.williams@bytecraft.example.com",
+          linkedin: "linkedin.com/in/marcuswilliams",
+          relevanceScore: 86
+        },
+        {
+          id: "sw-004-c2",
+          name: "Emma Lewis",
+          title: "Chief Revenue Officer",
+          phone: "(212) 555-9878",
+          email: "e.lewis@bytecraft.example.com",
+          linkedin: "linkedin.com/in/emmalewis",
+          relevanceScore: 91
+        }
+      ]
+    },
+    {
+      id: "sw-005",
+      name: "Infinite Logic Software",
+      description: "Enterprise software solutions for healthcare and financial industries.",
+      address: "456 Lexington Ave, New York, NY 10017",
+      phone: "(212) 555-6543",
+      website: "https://infinitelogic.example.com",
+      email: "sales@infinitelogic.example.com",
+      category: "Software Development",
+      rating: 4.8,
+      reviewCount: 94,
+      imageUrl: "https://via.placeholder.com/150",
+      size: "50-100 employees",
+      yearFounded: 2010,
+      contacts: [
+        {
+          id: "sw-005-c1",
+          name: "Thomas Reid",
+          title: "Managing Director",
+          phone: "(212) 555-6544",
+          email: "t.reid@infinitelogic.example.com",
+          linkedin: "linkedin.com/in/thomasreid",
+          relevanceScore: 94
+        },
+        {
+          id: "sw-005-c2",
+          name: "Sophia Martinez",
+          title: "Head of Client Success",
+          phone: "(212) 555-6545",
+          email: "s.martinez@infinitelogic.example.com",
+          linkedin: "linkedin.com/in/sophiamartinez",
+          relevanceScore: 87
+        }
+      ]
+    },
+    {
+      id: "sw-006",
+      name: "Cipher Systems",
+      description: "Cybersecurity software development and consulting.",
+      address: "222 W 34th St, New York, NY 10001",
+      phone: "(212) 555-7777",
+      website: "https://ciphersystems.example.com",
+      email: "security@ciphersystems.example.com",
+      category: "Software Development",
+      rating: 4.7,
+      reviewCount: 82,
+      imageUrl: "https://via.placeholder.com/150",
+      size: "25-50 employees",
+      yearFounded: 2014,
+      contacts: [
+        {
+          id: "sw-006-c1",
+          name: "Elena Vasquez",
+          title: "Chief Security Officer",
+          phone: "(212) 555-7778",
+          email: "e.vasquez@ciphersystems.example.com",
+          linkedin: "linkedin.com/in/elenavasquez",
+          relevanceScore: 96
+        },
+        {
+          id: "sw-006-c2",
+          name: "Daniel Kim",
+          title: "Business Development Manager",
+          phone: "(212) 555-7779",
+          email: "d.kim@ciphersystems.example.com",
+          linkedin: "linkedin.com/in/danielkim",
+          relevanceScore: 84
+        }
+      ]
+    },
+    {
+      id: "sw-007",
+      name: "VisionWare Solutions",
+      description: "Custom software development with focus on data visualization and analytics.",
+      address: "888 7th Avenue, New York, NY 10019",
+      phone: "(212) 555-8888",
+      website: "https://visionware.example.com",
+      email: "info@visionware.example.com",
+      category: "Software Development",
+      rating: 4.4,
+      reviewCount: 67,
+      imageUrl: "https://via.placeholder.com/150",
+      size: "10-25 employees",
+      yearFounded: 2017,
+      contacts: [
+        {
+          id: "sw-007-c1",
+          name: "Aaron Clarke",
+          title: "Founder & CEO",
+          phone: "(212) 555-8889",
+          email: "a.clarke@visionware.example.com",
+          linkedin: "linkedin.com/in/aaronclarke",
+          relevanceScore: 97
+        },
+        {
+          id: "sw-007-c2",
+          name: "Natalie Wong",
+          title: "Director of Operations",
+          phone: "(212) 555-8890",
+          email: "n.wong@visionware.example.com",
+          linkedin: "linkedin.com/in/nataliewong",
+          relevanceScore: 82
+        }
+      ]
+    },
+    {
+      id: "sw-008",
+      name: "Echo Development Group",
+      description: "Web and mobile application development across multiple industries.",
+      address: "777 3rd Avenue, New York, NY 10017",
+      phone: "(212) 555-9999",
+      website: "https://echodev.example.com",
+      email: "hello@echodev.example.com",
+      category: "Software Development",
+      rating: 4.5,
+      reviewCount: 86,
+      imageUrl: "https://via.placeholder.com/150",
+      size: "25-50 employees",
+      yearFounded: 2013,
+      contacts: [
+        {
+          id: "sw-008-c1",
+          name: "Jennifer Moore",
+          title: "Head of Project Management",
+          phone: "(212) 555-9990",
+          email: "j.moore@echodev.example.com",
+          linkedin: "linkedin.com/in/jennifermoore",
+          relevanceScore: 89
+        },
+        {
+          id: "sw-008-c2",
+          name: "Benjamin Wright",
+          title: "Sales Director",
+          phone: "(212) 555-9991",
+          email: "b.wright@echodev.example.com",
+          linkedin: "linkedin.com/in/benjaminwright",
+          relevanceScore: 93
+        }
+      ]
+    },
+    {
+      id: "sw-009",
+      name: "Cobalt Digital",
+      description: "Digital transformation consultancy with software development expertise.",
+      address: "999 Avenue of the Americas, New York, NY 10018",
+      phone: "(212) 555-1111",
+      website: "https://cobaltdigital.example.com",
+      email: "contact@cobaltdigital.example.com",
+      category: "Software Development",
+      rating: 4.6,
+      reviewCount: 101,
+      imageUrl: "https://via.placeholder.com/150",
+      size: "50-100 employees",
+      yearFounded: 2012,
+      contacts: [
+        {
+          id: "sw-009-c1",
+          name: "Andrew Thompson",
+          title: "Managing Partner",
+          phone: "(212) 555-1112",
+          email: "a.thompson@cobaltdigital.example.com",
+          linkedin: "linkedin.com/in/andrewthompson",
+          relevanceScore: 95
+        },
+        {
+          id: "sw-009-c2",
+          name: "Olivia Chen",
+          title: "Client Relations Manager",
+          phone: "(212) 555-1113",
+          email: "o.chen@cobaltdigital.example.com",
+          linkedin: "linkedin.com/in/oliviachen",
+          relevanceScore: 88
+        }
+      ]
+    },
+    {
+      id: "sw-010",
+      name: "Horizon Technologies",
+      description: "Full-service software development with expertise in cloud solutions.",
+      address: "333 Hudson Street, New York, NY 10013",
+      phone: "(212) 555-2222",
+      website: "https://horizontech.example.com",
+      email: "info@horizontech.example.com",
+      category: "Software Development",
+      rating: 4.7,
+      reviewCount: 93,
+      imageUrl: "https://via.placeholder.com/150",
+      size: "50-100 employees",
+      yearFounded: 2009,
+      contacts: [
+        {
+          id: "sw-010-c1",
+          name: "Gabriel Santos",
+          title: "Technical Director",
+          phone: "(212) 555-2223",
+          email: "g.santos@horizontech.example.com",
+          linkedin: "linkedin.com/in/gabrielsantos",
+          relevanceScore: 91
+        },
+        {
+          id: "sw-010-c2",
+          name: "Samantha Lee",
+          title: "VP of Strategy",
+          phone: "(212) 555-2224",
+          email: "s.lee@horizontech.example.com",
+          linkedin: "linkedin.com/in/samanthalee",
+          relevanceScore: 90
+        }
+      ]
+    }
+  ];
+  
+  // Return the requested number of companies
+  return softwareCompanies.slice(0, Math.min(count, softwareCompanies.length));
+}
+
+/**
  * Get sample data businesses based on query and location
  */
-export function getSampleBusinessData(query: string, location?: string, count: number = 10): BusinessData[] {
+export function getSampleBusinessData(query: string | undefined, location?: string, count: number = 10): BusinessData[] {
   // Identify industry based on query
-  const queryLower = query.toLowerCase();
+  const queryLower = query ? query.toLowerCase() : '';
+  
+  if (!query || query.trim() === '') {
+    // If no query is provided, return a default sample
+    return getSoftwareCompanies(count);
+  }
   
   if (queryLower.includes('clean') || queryLower.includes('janitor') || queryLower.includes('maid')) {
     return getCleaningServices(count);
