@@ -1,76 +1,71 @@
 /**
- * Data models for business and contact information
+ * Business data models for LeadHunter
+ * Defines the structure for businesses and contacts
  */
+
 export interface Contact {
-  contactId?: string;
+  contactId: string;
   name: string;
   position?: string;
   email?: string;
   phoneNumber?: string;
-  isDecisionMaker?: boolean;
-  isPrimary?: boolean;
-  companyName?: string;
-  companyId?: string;
-  id?: number;
-  searchDate?: Date;
-  lastContactDate?: Date | null;
+  isDecisionMaker: boolean;
+  companyName: string;
+  instagram?: string;
+  twitter?: string;
+  linkedin?: string;
+  notes?: string;
+  tags?: string[];
+  lastContactDate?: Date;
 }
 
 export interface BusinessData {
   id: string;
   name: string;
-  address?: string;
-  phoneNumber?: string;
-  website?: string;
   description?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  phoneNumber?: string;
+  email?: string;
+  website?: string;
   category?: string;
   rating?: number;
   reviewCount?: number;
-  imageUrl?: string;
-  source?: string;
-  sourceUrl?: string;
-  scrapedDate?: Date;
+  yearEstablished?: string;
+  employeeCount?: number;
+  revenue?: string;
   contacts?: Contact[];
+  source: string;
+  sourceUrl: string;
+  scrapedDate: Date;
+  tags?: string[];
+  notes?: string;
+  relevanceScore?: number;
 }
 
 export interface ScrapingResult {
-  success: boolean;
   businesses: BusinessData[];
-  message?: string;
-  errorCode?: string;
-  sources?: string[];
-  meta?: {
-    totalResultsFound: number;
-    totalProcessedBusinesses: number;
-    totalContactsGenerated: number;
-    pagesRetrieved: number;
-    totalCount?: number;
-    quotaStatus?: string;
-  };
-}
-
-export interface ErrorResponse {
-  code: string;
-  message: string;
-}
-
-export interface SheetExportResult {
-  success: boolean;
-  message: string;
-  url: string;
-}
-
-export interface BusinessLocation {
-  lat: number;
-  lng: number;
-  formattedAddress?: string;
+  sources: string[];
+  query: string;
+  location?: string;
+  executionTime?: number;
+  dataQualityScore?: number;
 }
 
 export interface SearchParams {
-  query?: string;
-  industry?: string;
+  query: string;
   location?: string;
-  position?: string;
-  page?: number;
-  limit?: number;
+  maxResults?: number;
+  minRating?: number;
+  includeOrganic?: boolean;
+  includeLocal?: boolean;
+  includeYelp?: boolean;
+  includeYellowPages?: boolean;
+  onlyDecisionMakers?: boolean;
+  useProxies?: boolean;
+  saveHtml?: boolean;
+  delayMin?: number;
+  delayMax?: number;
 }
