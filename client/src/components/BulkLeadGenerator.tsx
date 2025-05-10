@@ -275,19 +275,52 @@ const BulkLeadGenerator: React.FC = () => {
       if (isIOS) {
         console.log("iOS device detected, using direct download approach");
         
-        // For iOS, use a simple direct URL approach with no complex data passing
-        // This is the most reliable way for mobile Safari
-        const exportUrl = `/api/bulk-leads/direct-download?filename=${encodeURIComponent(filename)}`;
+        // CRITICAL FIX: Use the direct CSV download without database references
+        // Generate the CSV directly in the frontend for maximum reliability
+        let csvContent = 'Company Name,Industry,Address,Phone,Website,Contact Name,Contact Position,Contact Email,Contact Phone,Is Decision Maker\n';
+        
+        // Build CSV directly from the search results
+        results.businesses.forEach((business: any) => {
+          if (!business.contacts || business.contacts.length === 0) {
+            csvContent += `${escapeCsvValue(business.name || '')},${escapeCsvValue(business.category || '')},${escapeCsvValue(business.address || '')},${escapeCsvValue(business.phoneNumber || '')},${escapeCsvValue(business.website || '')},,,,,""\n`;
+          } else {
+            business.contacts.forEach((contact: any) => {
+              csvContent += `${escapeCsvValue(business.name || '')},${escapeCsvValue(business.category || '')},${escapeCsvValue(business.address || '')},${escapeCsvValue(business.phoneNumber || '')},${escapeCsvValue(business.website || '')},${escapeCsvValue(contact.name || '')},${escapeCsvValue(contact.position || '')},${escapeCsvValue(contact.email || '')},${escapeCsvValue(contact.phoneNumber || '')},${escapeCsvValue(contact.isDecisionMaker ? 'Yes' : 'No')}\n`;
+            });
+          }
+        });
+        
+        // Create a Blob with the CSV content
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        
+        // Create a data URL from the Blob
+        const dataUrl = URL.createObjectURL(blob);
+        
+        // FOR iOS - we'll use a direct URL
+        const exportUrl = dataUrl;
         
         // Alert user about the download
         alert('CSV download started! Check your Files app shortly.');
         
-        // Use window.location or window.open
-        if (true) { // Using direct location.href - more reliable on iOS
-          window.location.href = exportUrl;
-        } else { // Alternative with window.open
-          window.open(exportUrl, '_blank');
-        }
+        // Create an anchor element to trigger the download
+        const a = document.createElement('a');
+        a.href = exportUrl;
+        a.download = filename;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        
+        // On iOS, we need to be very explicit
+        a.rel = 'noopener';
+        a.target = '_blank';
+        
+        // Trigger the click and download
+        a.click();
+        
+        // Cleanup
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(exportUrl);
+        }, 1000);
         
         // No cleanup needed for the direct URL approach
       } else {
