@@ -1,12 +1,12 @@
 /**
- * Google Sheets integration service for NexLead
- * Handles creation and updating of Google Sheets containing business lead data
+ * Google Sheets integration for the NexLead application
+ * Provides functionality to export business leads to Google Sheets
  */
 
-import { google } from 'googleapis';
+import { google, sheets_v4 } from 'googleapis';
 import { BusinessData, Contact } from '../models/business-data';
 
-interface SheetCreateResult {
+interface SheetExportResult {
   success: boolean;
   spreadsheetId?: string;
   spreadsheetUrl?: string;
@@ -14,92 +14,112 @@ interface SheetCreateResult {
 }
 
 export class GoogleSheetsService {
-  private sheets: any;
-  private apiKey: string | undefined;
+  private sheets: sheets_v4.Sheets | null = null;
+  private lastExportId: string | null = null;
+  private lastExportUrl: string | null = null;
   
   constructor() {
-    this.apiKey = process.env.GOOGLE_API_KEY;
-    
-    if (this.apiKey) {
-      this.sheets = google.sheets({ version: 'v4', auth: this.apiKey });
-      console.log('🔑 Google Sheets API initialized');
-    } else {
-      console.log('⚠️ Google Sheets API key not found');
+    try {
+      // Initialize the Sheets API client with the API key
+      if (process.env.GOOGLE_API_KEY) {
+        const auth = google.auth.fromAPIKey(process.env.GOOGLE_API_KEY);
+        this.sheets = google.sheets({ version: 'v4', auth });
+        console.log('✅ Google Sheets API initialized successfully');
+      } else {
+        console.log('⚠️ Google API Key not found, Sheets export will not be available');
+      }
+    } catch (error) {
+      console.error('❌ Error initializing Google Sheets API:', error);
+      this.sheets = null;
     }
   }
   
   /**
-   * Create a new Google Sheet with business data
+   * Validate the Google API key by making a simple test request
+   */
+  async checkApiKeyValidity(): Promise<boolean> {
+    if (!this.sheets) {
+      console.log('⚠️ Google Sheets API not initialized, cannot validate API key');
+      return false;
+    }
+    
+    try {
+      // Make a simple request to verify the API key works
+      // We'll just request spreadsheet metadata for a sample spreadsheet ID
+      // This is a lightweight operation that doesn't require any specific permissions
+      // Using a test spreadsheet ID format - actual spreadsheet doesn't need to exist
+      await this.sheets.spreadsheets.get({
+        spreadsheetId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms', // Example ID from Google's documentation
+        fields: 'spreadsheetId' // Request minimal data to reduce overhead
+      });
+      
+      console.log('✅ Google API Key validation successful');
+      return true;
+    } catch (error) {
+      console.warn(`⚠️ Google API Key validation failed: ${(error as Error).message}`);
+      return false;
+    }
+  }
+  
+  /**
+   * Check if the Google Sheets API is authorized
+   */
+  isAuthorized(): boolean {
+    return this.sheets !== null;
+  }
+  
+  /**
+   * Create a new Google Spreadsheet with business data
    */
   async createSheetWithBusinessData(
     title: string,
     businesses: BusinessData[]
-  ): Promise<SheetCreateResult> {
-    if (!this.apiKey || !this.sheets) {
-      return { 
-        success: false, 
-        error: 'Google Sheets API key not found' 
+  ): Promise<SheetExportResult> {
+    if (!this.sheets) {
+      return {
+        success: false,
+        error: 'Google Sheets API not initialized'
       };
     }
     
     try {
       // Create a new spreadsheet
-      const dateStr = new Date().toISOString().split('T')[0];
-      const response = await this.sheets.spreadsheets.create({
+      const spreadsheet = await this.sheets.spreadsheets.create({
         requestBody: {
           properties: {
-            title: `NexLead Results - ${title} - ${dateStr}`
+            title: `NexLead - ${title} - ${new Date().toLocaleDateString()}`
           },
           sheets: [
-            { properties: { title: 'Businesses' } },
-            { properties: { title: 'Contacts' } }
+            {
+              properties: {
+                title: 'Businesses',
+                gridProperties: {
+                  frozenRowCount: 1 // Freeze the header row
+                }
+              }
+            },
+            {
+              properties: {
+                title: 'Contacts',
+                gridProperties: {
+                  frozenRowCount: 1 // Freeze the header row
+                }
+              }
+            }
           ]
         }
       });
       
-      const spreadsheetId = response.data.spreadsheetId;
-      const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
+      const spreadsheetId = spreadsheet.data.spreadsheetId;
       
-      // Prepare data for the business sheet
-      const businessHeaders = [
-        'Business Name',
-        'Industry',
-        'Address',
-        'Phone Number',
-        'Website',
-        'Size',
-        'Location',
-        'Source',
-        'Extraction Date',
-        'Google Rating',
-        'Reviews'
-      ];
+      if (!spreadsheetId) {
+        return {
+          success: false,
+          error: 'Failed to create spreadsheet'
+        };
+      }
       
-      const businessData = businesses.map(business => [
-        business.name,
-        business.industry,
-        business.address,
-        business.phoneNumber,
-        business.website,
-        business.size,
-        business.location,
-        business.data_source,
-        business.extraction_date,
-        business.google_rating || '',
-        business.review_count || ''
-      ]);
-      
-      // Update the businesses sheet
-      await this.sheets.spreadsheets.values.update({
-        spreadsheetId,
-        range: 'Businesses!A1',
-        valueInputOption: 'RAW',
-        requestBody: {
-          values: [businessHeaders, ...businessData]
-        }
-      });
-      
-      // Format headers
+      // Format header for businesses sheet
       await this.sheets.spreadsheets.batchUpdate({
         spreadsheetId,
         requestBody: {
@@ -107,244 +127,176 @@ export class GoogleSheetsService {
             {
               repeatCell: {
                 range: {
-                  sheetId: 0,
+                  sheetId: 0, // First sheet (Businesses)
                   startRowIndex: 0,
                   endRowIndex: 1
                 },
                 cell: {
                   userEnteredFormat: {
-                    backgroundColor: {
-                      red: 0.2,
-                      green: 0.2,
-                      blue: 0.2
-                    },
-                    textFormat: {
-                      foregroundColor: {
-                        red: 1.0,
-                        green: 1.0,
-                        blue: 1.0
-                      },
-                      bold: true
-                    }
+                    textFormat: { bold: true },
+                    backgroundColor: { red: 0.2, green: 0.2, blue: 0.4 },
+                    horizontalAlignment: 'CENTER',
+                    textRotation: { angle: 0 },
+                    foregroundColor: { red: 1.0, green: 1.0, blue: 1.0 }
                   }
                 },
-                fields: 'userEnteredFormat(backgroundColor,textFormat)'
+                fields: 'userEnteredFormat(textFormat,backgroundColor,horizontalAlignment,foregroundColor)'
+              }
+            },
+            {
+              repeatCell: {
+                range: {
+                  sheetId: 1, // Second sheet (Contacts)
+                  startRowIndex: 0,
+                  endRowIndex: 1
+                },
+                cell: {
+                  userEnteredFormat: {
+                    textFormat: { bold: true },
+                    backgroundColor: { red: 0.2, green: 0.2, blue: 0.4 },
+                    horizontalAlignment: 'CENTER',
+                    textRotation: { angle: 0 },
+                    foregroundColor: { red: 1.0, green: 1.0, blue: 1.0 }
+                  }
+                },
+                fields: 'userEnteredFormat(textFormat,backgroundColor,horizontalAlignment,foregroundColor)'
               }
             }
           ]
         }
       });
       
-      // Extract all contacts from businesses
-      const allContacts: Contact[] = [];
-      businesses.forEach(business => {
-        business.contacts.forEach(contact => {
-          // Ensure contact has company information
-          allContacts.push({
-            ...contact,
-            companyName: contact.companyName || business.name,
-            companyWebsite: contact.companyWebsite || business.website
-          });
-        });
-      });
+      // Prepare data for the businesses sheet
+      const businessHeaders = [
+        'Business Name', 
+        'Category', 
+        'Address', 
+        'Phone', 
+        'Website', 
+        'Email',
+        'Rating', 
+        'Reviews',
+        'Has Decision Maker', 
+        'Source',
+        'Date Added'
+      ];
       
-      if (allContacts.length > 0) {
-        const contactHeaders = [
-          'Full Name',
-          'Title/Position',
-          'Email',
-          'Phone Number',
-          'Company Name',
-          'Company Website',
-          'Is Decision Maker',
-          'LinkedIn',
-          'Notes',
-          'Source'
-        ];
-        
-        const contactData = allContacts.map(contact => [
-          contact.name,
-          contact.title || '',
-          contact.email || '',
-          contact.phoneNumber || '',
-          contact.companyName,
-          contact.companyWebsite || '',
-          contact.is_decision_maker ? 'Yes' : 'No',
-          contact.linkedin || '',
-          contact.notes || '',
-          contact.source || ''
-        ]);
-        
-        // Update the contacts sheet
-        await this.sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: 'Contacts!A1',
-          valueInputOption: 'RAW',
-          requestBody: {
-            values: [contactHeaders, ...contactData]
-          }
-        });
-        
-        // Format headers for contacts sheet
-        await this.sheets.spreadsheets.batchUpdate({
-          spreadsheetId,
-          requestBody: {
-            requests: [
-              {
-                repeatCell: {
-                  range: {
-                    sheetId: 1,
-                    startRowIndex: 0,
-                    endRowIndex: 1
-                  },
-                  cell: {
-                    userEnteredFormat: {
-                      backgroundColor: {
-                        red: 0.2,
-                        green: 0.2,
-                        blue: 0.2
-                      },
-                      textFormat: {
-                        foregroundColor: {
-                          red: 1.0,
-                          green: 1.0,
-                          blue: 1.0
-                        },
-                        bold: true
-                      }
-                    }
-                  },
-                  fields: 'userEnteredFormat(backgroundColor,textFormat)'
-                }
-              }
-            ]
-          }
-        });
-      }
+      const businessesData = [
+        businessHeaders,
+        ...businesses.map(business => [
+          business.name || '',
+          business.category || '',
+          business.address || '',
+          business.phoneNumber || '',
+          business.website || '',
+          business.email || '',
+          business.rating?.toString() || '',
+          business.reviewCount?.toString() || '',
+          (business.isDecisionMaker || false) ? 'Yes' : 'No',
+          business.source || '',
+          new Date(business.scrapedDate || new Date()).toLocaleDateString()
+        ])
+      ];
       
-      console.log(`📊 Google Sheets: Created spreadsheet "${response.data.properties.title}"`);
-      console.log(`📊 Google Sheets: Added ${businesses.length} businesses`);
-      console.log(`📊 Google Sheets: Added ${allContacts.length} contacts`);
-      
-      return {
-        success: true,
-        spreadsheetId,
-        spreadsheetUrl
-      };
-    } catch (error) {
-      console.error('❌ Google Sheets Error:', error);
-      return {
-        success: false,
-        error: (error as Error).message
-      };
-    }
-  }
-  
-  /**
-   * Update an existing spreadsheet with business data
-   */
-  async updateSheetWithBusinessData(
-    spreadsheetId: string,
-    businesses: BusinessData[]
-  ): Promise<SheetCreateResult> {
-    if (!this.apiKey || !this.sheets) {
-      return { 
-        success: false, 
-        error: 'Google Sheets API key not found' 
-      };
-    }
-    
-    try {
-      // Prepare business data
-      const businessData = businesses.map(business => [
-        business.name,
-        business.industry,
-        business.address,
-        business.phoneNumber,
-        business.website,
-        business.size,
-        business.location,
-        business.data_source,
-        business.extraction_date,
-        business.google_rating || '',
-        business.review_count || ''
-      ]);
-      
-      // Get current business data to append
-      const currentData = await this.sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range: 'Businesses!A:K'
-      });
-      
-      const existingRowCount = currentData.data.values ? currentData.data.values.length : 1;
-      
-      // Append new business data
+      // Write data to the businesses sheet
       await this.sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: `Businesses!A${existingRowCount + 1}`,
-        valueInputOption: 'RAW',
+        range: 'Businesses!A1',
+        valueInputOption: 'USER_ENTERED',
         requestBody: {
-          values: businessData
+          values: businessesData
         }
       });
       
-      // Extract and append contact data
-      const allContacts: Contact[] = [];
+      // Prepare data for the contacts sheet
+      const contactHeaders = [
+        'Business Name',
+        'Contact Name',
+        'Position',
+        'Email',
+        'Phone',
+        'Is Decision Maker',
+        'Date Added'
+      ];
+      
+      // Flatten all contacts from all businesses
+      const allContacts: (Contact & { businessName: string })[] = [];
       businesses.forEach(business => {
-        business.contacts.forEach(contact => {
-          allContacts.push({
-            ...contact,
-            companyName: contact.companyName || business.name,
-            companyWebsite: contact.companyWebsite || business.website
+        if (business.contacts && business.contacts.length > 0) {
+          business.contacts.forEach(contact => {
+            allContacts.push({
+              ...contact,
+              businessName: business.name
+            });
           });
-        });
+        }
       });
       
-      if (allContacts.length > 0) {
-        // Get current contact data
-        const currentContactData = await this.sheets.spreadsheets.values.get({
-          spreadsheetId,
-          range: 'Contacts!A:J'
-        });
-        
-        const existingContactRowCount = currentContactData.data.values ? currentContactData.data.values.length : 1;
-        
-        // Prepare contact data
-        const contactData = allContacts.map(contact => [
-          contact.name,
-          contact.title || '',
+      const contactsData = [
+        contactHeaders,
+        ...allContacts.map(contact => [
+          contact.businessName || '',
+          contact.name || '',
+          contact.position || '',
           contact.email || '',
           contact.phoneNumber || '',
-          contact.companyName,
-          contact.companyWebsite || '',
-          contact.is_decision_maker ? 'Yes' : 'No',
-          contact.linkedin || '',
-          contact.notes || '',
-          contact.source || ''
-        ]);
-        
-        // Append new contact data
-        await this.sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: `Contacts!A${existingContactRowCount + 1}`,
-          valueInputOption: 'RAW',
-          requestBody: {
-            values: contactData
-          }
-        });
-      }
+          contact.isDecisionMaker ? 'Yes' : 'No',
+          new Date().toLocaleDateString()
+        ])
+      ];
       
-      console.log(`📊 Google Sheets: Updated spreadsheet ${spreadsheetId}`);
-      console.log(`📊 Google Sheets: Added ${businesses.length} businesses`);
-      console.log(`📊 Google Sheets: Added ${allContacts.length} contacts`);
+      // Write data to the contacts sheet
+      await this.sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: 'Contacts!A1',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: contactsData
+        }
+      });
+      
+      // Auto-resize all columns in both sheets
+      await this.sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [
+            {
+              autoResizeDimensions: {
+                dimensions: {
+                  sheetId: 0,
+                  dimension: 'COLUMNS',
+                  startIndex: 0,
+                  endIndex: businessHeaders.length
+                }
+              }
+            },
+            {
+              autoResizeDimensions: {
+                dimensions: {
+                  sheetId: 1,
+                  dimension: 'COLUMNS',
+                  startIndex: 0,
+                  endIndex: contactHeaders.length
+                }
+              }
+            }
+          ]
+        }
+      });
+      
+      // Store export info
+      this.lastExportId = spreadsheetId;
+      this.lastExportUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
+      
+      console.log(`✅ Exported ${businesses.length} businesses and ${allContacts.length} contacts to Google Sheets: ${this.lastExportUrl}`);
       
       return {
         success: true,
         spreadsheetId,
-        spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}`
+        spreadsheetUrl: this.lastExportUrl
       };
     } catch (error) {
-      console.error('❌ Google Sheets Error:', error);
+      console.error('❌ Error exporting to Google Sheets:', error);
       return {
         success: false,
         error: (error as Error).message
@@ -353,23 +305,119 @@ export class GoogleSheetsService {
   }
   
   /**
-   * Check if the API key is valid and working
+   * Get information about the last exported spreadsheet
    */
-  async checkApiKeyValidity(): Promise<boolean> {
-    if (!this.apiKey || !this.sheets) {
-      return false;
+  getLastExport(): { id: string | null; url: string | null } {
+    return {
+      id: this.lastExportId,
+      url: this.lastExportUrl
+    };
+  }
+  
+  /**
+   * Export business data to an existing spreadsheet
+   */
+  async exportBusinessData(
+    spreadsheetId: string,
+    businesses: BusinessData[]
+  ): Promise<SheetExportResult> {
+    if (!this.sheets) {
+      return {
+        success: false,
+        error: 'Google Sheets API not initialized'
+      };
     }
     
     try {
-      // Try to list spreadsheets to validate API key
-      await this.sheets.spreadsheets.get({
-        spreadsheetId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms' // Example Google Sheets ID
+      // Check if the spreadsheet exists and we have access
+      const spreadsheet = await this.sheets.spreadsheets.get({
+        spreadsheetId
       });
       
-      return true;
+      if (!spreadsheet || !spreadsheet.data) {
+        return {
+          success: false,
+          error: 'Spreadsheet not found or no access'
+        };
+      }
+      
+      // Prepare data
+      const businessesData = businesses.map(business => [
+        business.name || '',
+        business.category || '',
+        business.address || '',
+        business.phoneNumber || '',
+        business.website || '',
+        business.email || '',
+        business.rating?.toString() || '',
+        business.reviewCount?.toString() || '',
+        (business.isDecisionMaker || false) ? 'Yes' : 'No',
+        business.source || '',
+        new Date(business.scrapedDate || new Date()).toLocaleDateString()
+      ]);
+      
+      // Append data to the businesses sheet
+      await this.sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range: 'Businesses!A:K',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: businessesData
+        }
+      });
+      
+      // Flatten all contacts
+      const allContacts: (Contact & { businessName: string })[] = [];
+      businesses.forEach(business => {
+        if (business.contacts && business.contacts.length > 0) {
+          business.contacts.forEach(contact => {
+            allContacts.push({
+              ...contact,
+              businessName: business.name
+            });
+          });
+        }
+      });
+      
+      // Append contacts data
+      if (allContacts.length > 0) {
+        const contactsData = allContacts.map(contact => [
+          contact.businessName || '',
+          contact.name || '',
+          contact.position || '',
+          contact.email || '',
+          contact.phoneNumber || '',
+          contact.isDecisionMaker ? 'Yes' : 'No',
+          new Date().toLocaleDateString()
+        ]);
+        
+        await this.sheets.spreadsheets.values.append({
+          spreadsheetId,
+          range: 'Contacts!A:G',
+          valueInputOption: 'USER_ENTERED',
+          requestBody: {
+            values: contactsData
+          }
+        });
+      }
+      
+      // Store export info
+      this.lastExportId = spreadsheetId;
+      this.lastExportUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
+      
+      console.log(`✅ Exported ${businesses.length} businesses and ${allContacts.length} contacts to existing Google Sheet: ${this.lastExportUrl}`);
+      
+      return {
+        success: true,
+        spreadsheetId,
+        spreadsheetUrl: this.lastExportUrl
+      };
     } catch (error) {
-      console.error('❌ Google Sheets API Key Validation Error:', error);
-      return false;
+      console.error('❌ Error exporting to existing Google Sheets:', error);
+      return {
+        success: false,
+        error: (error as Error).message
+      };
     }
   }
 }

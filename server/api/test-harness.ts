@@ -4,11 +4,10 @@
  * Tracks success/failure rates and sends alerts if needed
  */
 
-import { v4 as uuidv4 } from 'uuid';
+import path from 'path';
+import fs from 'fs';
 import { simplifiedSelfTest } from './simplified-self-test';
 import { TestReport } from '../models/business-data';
-import * as fs from 'fs';
-import * as path from 'path';
 
 interface SystemDiagnostics {
   timestamp: string;
@@ -30,7 +29,7 @@ export class TestHarness {
   private diagnosticsDir: string;
   private startTime: number;
   private testHistory: {
-    test_id: string;
+    id: string;
     timestamp: string;
     passed: boolean;
     error?: string;
@@ -42,10 +41,11 @@ export class TestHarness {
     this.startTime = Date.now();
     this.testHistory = [];
     
-    // Create logs directories
+    // Create directories if they don't exist
     if (!fs.existsSync(this.logsDir)) {
       fs.mkdirSync(this.logsDir, { recursive: true });
     }
+    
     if (!fs.existsSync(this.diagnosticsDir)) {
       fs.mkdirSync(this.diagnosticsDir, { recursive: true });
     }
@@ -55,45 +55,48 @@ export class TestHarness {
    * Run all tests and update diagnostics
    */
   async runAllTests(): Promise<SystemDiagnostics> {
-    console.log('📊 TestHarness: Running all tests...');
+    const testReportFile = path.join(this.logsDir, `test-harness-run-${new Date().toISOString().replace(/:/g, '-')}.log`);
+    console.log(`🔍 Running test harness, logging to ${testReportFile}`);
+    
+    const startTime = Date.now();
     
     try {
-      // Run all self-tests
+      // Run all self tests
       const testResults = await simplifiedSelfTest.runAllTests();
       
-      // Update test history
-      testResults.tests.forEach(test => {
-        this.testHistory.push({
-          test_id: test.execution_id,
-          timestamp: test.timestamp,
-          passed: test.passed,
-          error: test.error || undefined
-        });
-      });
-      
-      // Limit history to the latest 100 tests
-      if (this.testHistory.length > 100) {
-        this.testHistory = this.testHistory.slice(-100);
-      }
-      
-      // Generate diagnostics
+      // Generate and save diagnostics
       const diagnostics = this.analyzeDiagnostics(testResults);
-      
-      // Save diagnostics
       this.saveDiagnostics(diagnostics);
+      
+      // Log test completion
+      const endTime = Date.now();
+      const executionTimeMs = endTime - startTime;
+      fs.appendFileSync(testReportFile, JSON.stringify({
+        timestamp: new Date().toISOString(),
+        test_results: testResults,
+        execution_time_ms: executionTimeMs,
+        diagnostics
+      }, null, 2));
       
       return diagnostics;
     } catch (error) {
-      console.error('📊 Error in test harness:', error);
+      console.error('❌ Error in test harness:', error);
       
+      fs.appendFileSync(testReportFile, JSON.stringify({
+        timestamp: new Date().toISOString(),
+        error: (error as Error).message,
+        stack: (error as Error).stack
+      }, null, 2));
+      
+      // Return empty diagnostics if an error occurs
       return {
         timestamp: new Date().toISOString(),
         passed_tests: 0,
         failed_tests: 0,
         pass_rate: 0,
         failures_by_type: {},
-        test_history: this.testHistory,
-        uptime_minutes: Math.floor((Date.now() - this.startTime) / (1000 * 60))
+        test_history: [],
+        uptime_minutes: Math.floor((Date.now() - this.startTime) / 60000)
       };
     }
   }
@@ -102,29 +105,36 @@ export class TestHarness {
    * Analyze test results to generate system diagnostics
    */
   private analyzeDiagnostics(testResults: TestReport): SystemDiagnostics {
-    // Count failures by test name
+    // Process test results
     const failuresByType: Record<string, number> = {};
     
-    testResults.tests.forEach(test => {
-      if (!test.passed) {
-        const testName = test.test_name;
-        failuresByType[testName] = (failuresByType[testName] || 0) + 1;
+    for (const result of testResults.results) {
+      if (!result.passed && result.error) {
+        const errorType = this.categorizeError(result.error);
+        failuresByType[errorType] = (failuresByType[errorType] || 0) + 1;
       }
-    });
+      
+      this.testHistory.push({
+        id: result.testCase.id,
+        timestamp: result.timestamp,
+        passed: result.passed,
+        error: result.error
+      });
+    }
     
-    // Calculate pass rate
-    const passRate = testResults.total_tests > 0 
-      ? testResults.passed_tests / testResults.total_tests 
-      : 0;
+    // Keep only the last 20 test results
+    if (this.testHistory.length > 20) {
+      this.testHistory = this.testHistory.slice(-20);
+    }
     
     return {
       timestamp: new Date().toISOString(),
-      passed_tests: testResults.passed_tests,
-      failed_tests: testResults.failed_tests,
-      pass_rate: passRate,
+      passed_tests: testResults.passedCount,
+      failed_tests: testResults.failedCount,
+      pass_rate: testResults.passRate,
       failures_by_type: failuresByType,
       test_history: this.testHistory,
-      uptime_minutes: Math.floor((Date.now() - this.startTime) / (1000 * 60))
+      uptime_minutes: Math.floor((Date.now() - this.startTime) / 60000)
     };
   }
   
@@ -132,18 +142,12 @@ export class TestHarness {
    * Save diagnostics to file
    */
   private saveDiagnostics(diagnostics: SystemDiagnostics): void {
-    try {
-      const filename = `diagnostics-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-      const filepath = path.join(this.diagnosticsDir, filename);
-      
-      fs.writeFileSync(filepath, JSON.stringify(diagnostics, null, 2));
-      
-      // Also save to a "latest" file for easy access
-      const latestFilepath = path.join(this.diagnosticsDir, 'latest-diagnostics.json');
-      fs.writeFileSync(latestFilepath, JSON.stringify(diagnostics, null, 2));
-    } catch (error) {
-      console.error('📊 Error saving diagnostics:', error);
-    }
+    const filePath = path.join(this.diagnosticsDir, `diagnostics-${new Date().toISOString().replace(/:/g, '-')}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(diagnostics, null, 2));
+    
+    // Also save to latest file
+    const latestFilePath = path.join(this.diagnosticsDir, 'latest-diagnostics.json');
+    fs.writeFileSync(latestFilePath, JSON.stringify(diagnostics, null, 2));
   }
   
   /**
@@ -151,16 +155,15 @@ export class TestHarness {
    */
   getLatestDiagnostics(): SystemDiagnostics | null {
     try {
-      const filepath = path.join(this.diagnosticsDir, 'latest-diagnostics.json');
-      
-      if (fs.existsSync(filepath)) {
-        const data = fs.readFileSync(filepath, 'utf8');
-        return JSON.parse(data) as SystemDiagnostics;
+      const latestFilePath = path.join(this.diagnosticsDir, 'latest-diagnostics.json');
+      if (!fs.existsSync(latestFilePath)) {
+        return null;
       }
       
-      return null;
+      const content = fs.readFileSync(latestFilePath, 'utf-8');
+      return JSON.parse(content) as SystemDiagnostics;
     } catch (error) {
-      console.error('📊 Error getting latest diagnostics:', error);
+      console.error('❌ Error getting latest diagnostics:', error);
       return null;
     }
   }
@@ -170,12 +173,32 @@ export class TestHarness {
    */
   isHealthy(threshold = 0.5): boolean {
     const diagnostics = this.getLatestDiagnostics();
-    
     if (!diagnostics) {
       return false;
     }
     
     return diagnostics.pass_rate >= threshold;
+  }
+  
+  /**
+   * Categorize an error message into a standard type
+   */
+  private categorizeError(error: string): string {
+    if (error.includes('CAPTCHA') || error.includes('captcha') || error.includes('robot')) {
+      return 'CAPTCHA_DETECTED';
+    } else if (error.includes('timeout') || error.includes('timed out')) {
+      return 'TIMEOUT';
+    } else if (error.includes('rate limit') || error.includes('too many requests') || error.includes('429')) {
+      return 'RATE_LIMITED';
+    } else if (error.includes('IP') || error.includes('blocked') || error.includes('banned')) {
+      return 'IP_BLOCKED';
+    } else if (error.includes('proxy') || error.includes('connection')) {
+      return 'CONNECTION_ERROR';
+    } else if (error.includes('parse') || error.includes('selector')) {
+      return 'PARSING_ERROR';
+    } else {
+      return 'UNKNOWN_ERROR';
+    }
   }
 }
 

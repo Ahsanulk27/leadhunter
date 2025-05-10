@@ -1,0 +1,46 @@
+{
+  "id": "be6fbc3b-168e-4b64-9e3d-fe4ae2320078",
+  "timestamp": "2025-05-10T09:30:21.708Z",
+  "results": [
+    {
+      "testCase": {
+        "id": "plumbers-ny",
+        "name": "Plumbers Test",
+        "searchParams": {
+          "query": "Plumbers",
+          "location": "New York",
+          "page": 1,
+          "limit": 20
+        },
+        "expectedMinResults": 3,
+        "enabled": true
+      },
+      "passed": true,
+      "resultCount": 20,
+      "executionTime": 11375,
+      "timestamp": "2025-05-10T09:29:45.072Z"
+    },
+    {
+      "testCase": {
+        "id": "property-management-la",
+        "name": "Property Management Test",
+        "searchParams": {
+          "query": "Property Management",
+          "location": "Los Angeles",
+          "page": 1,
+          "limit": 20
+        },
+        "expectedMinResults": 3,
+        "enabled": true
+      },
+      "passed": true,
+      "resultCount": 20,
+      "executionTime": 36636,
+      "timestamp": "2025-05-10T09:30:21.708Z"
+    }
+  ],
+  "passedCount": 2,
+  "failedCount": 0,
+  "passRate": 1,
+  "executionTimeMs": 48012
+}

@@ -1,0 +1,79 @@
+{
+  "execution_id": "031cd1d4-d323-4484-bf5f-db4ac24aee18",
+  "query": "Property Management",
+  "location": "Los Angeles",
+  "timestamp": "2025-05-10T09:29:59.742Z",
+  "status": "completed",
+  "sources": [
+    "google",
+    "yelp",
+    "yellowpages"
+  ],
+  "success_count": 1,
+  "error_count": 2,
+  "total_businesses_found": 31,
+  "scraping_attempts": [
+    {
+      "url": "https://www.google.com/search?q=Property%20Management%20in%20Los%20Angeles&tbm=lcl",
+      "attempt": 1,
+      "timestamp": "2025-05-10T09:29:59.742Z",
+      "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    },
+    {
+      "url": "https://www.yelp.com/search?find_desc=Property%20Management&find_loc=Los%20Angeles",
+      "attempt": 1,
+      "timestamp": "2025-05-10T09:29:59.742Z",
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1"
+    },
+    {
+      "url": "https://www.yellowpages.com/search?search_terms=Property%20Management&geo_location_terms=Los%20Angeles",
+      "attempt": 1,
+      "timestamp": "2025-05-10T09:29:59.742Z",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    },
+    {
+      "url": "https://www.yellowpages.com/search?search_terms=Property%20Management&geo_location_terms=Los%20Angeles",
+      "attempt": 2,
+      "timestamp": "2025-05-10T09:30:02.566Z",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59"
+    },
+    {
+      "url": "https://www.yelp.com/search?find_desc=Property%20Management&find_loc=Los%20Angeles",
+      "attempt": 2,
+      "timestamp": "2025-05-10T09:30:03.183Z",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36"
+    },
+    {
+      "url": "https://www.yelp.com/search?find_desc=Property%20Management&find_loc=Los%20Angeles",
+      "attempt": 3,
+      "timestamp": "2025-05-10T09:30:06.544Z",
+      "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 11_5_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.71 Safari/537.36"
+    },
+    {
+      "url": "https://www.yelp.com/search?find_desc=Property%20Management&find_loc=Los%20Angeles",
+      "attempt": 4,
+      "timestamp": "2025-05-10T09:30:12.226Z",
+      "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Safari/605.1.15"
+    }
+  ],
+  "error_details": [
+    {
+      "source": "yelp",
+      "error": "Request failed with status code 403",
+      "stack": "AxiosError: Request failed with status code 403\n    at settle (file:///home/runner/workspace/node_modules/axios/lib/core/settle.js:19:12)\n    at IncomingMessage.handleStreamEnd (file:///home/runner/workspace/node_modules/axios/lib/adapters/http.js:599:11)\n    at IncomingMessage.emit (node:events:530:35)\n    at endReadableNT (node:internal/streams/readable:1698:12)\n    at process.processTicksAndRejections (node:internal/process/task_queues:82:21)\n    at Axios.request (file:///home/runner/workspace/node_modules/axios/lib/core/Axios.js:45:41)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async CheerioScraper.fetchWithRetry (/home/runner/workspace/server/api/cheerio-scraper.ts:382:26)\n    at async CheerioScraper.searchYelpBusinesses (/home/runner/workspace/server/api/cheerio-scraper.ts:133:20)\n    at async Promise.allSettled (index 1)\n    at async SearchController.searchBusinessData (/home/runner/workspace/server/controllers/search-controller.ts:73:29)\n    at async SimplifiedSelfTest.runAllTests (/home/runner/workspace/server/api/simplified-self-test.ts:78:30)\n    at async TestHarness.runAllTests (/home/runner/workspace/server/api/test-harness.ts:65:27)\n    at async Timeout._onTimeout (/home/runner/workspace/server/startup.ts:28:29)",
+      "timestamp": "2025-05-10T09:30:21.639Z"
+    },
+    {
+      "source": "google",
+      "error": "No results found",
+      "timestamp": "2025-05-10T09:30:21.639Z"
+    },
+    {
+      "source": "yelp",
+      "error": "No results found",
+      "timestamp": "2025-05-10T09:30:21.639Z"
+    }
+  ],
+  "completion_time": "2025-05-10T09:30:21.708Z",
+  "execution_time_ms": 21966
+}

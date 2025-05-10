@@ -3,8 +3,8 @@
  * Handles initial health checks and self-testing
  */
 
-import { testHarness } from './api/test-harness';
-import { googleSheetsService } from './api/google-sheets-service';
+import { simplifiedSelfTest } from './api/simplified-self-test';
+import { google } from 'googleapis';
 
 /**
  * Run startup operations asynchronously
@@ -12,29 +12,60 @@ import { googleSheetsService } from './api/google-sheets-service';
 export async function runStartupOperations(): Promise<void> {
   console.log('🚀 Running startup operations for NexLead...');
   
+  // Initialize Google API client
+  initializeGoogleClient();
+  
+  // Run self-tests to verify system functionality
+  await runStartupTests();
+}
+
+/**
+ * Initialize Google API client with API key
+ */
+function initializeGoogleClient(): void {
   try {
-    // Check Google Sheets API status
-    if (process.env.GOOGLE_API_KEY) {
-      const isValid = await googleSheetsService.checkApiKeyValidity();
-      console.log(`📊 Google Sheets API Key: ${isValid ? 'Valid' : 'Invalid'}`);
-    } else {
-      console.log('⚠️ Google Sheets API Key not found, export functionality will be limited');
+    const apiKey = process.env.GOOGLE_API_KEY;
+    
+    if (!apiKey) {
+      console.warn('⚠️ Google API Key not found in environment variables');
+      return;
     }
     
-    // Run all tests to verify system is operational
-    setTimeout(async () => {
-      try {
-        console.log('🧪 Running startup test harness...');
-        const diagnostics = await testHarness.runAllTests();
-        console.log(`🧪 Startup tests completed: ${diagnostics.passed_tests}/${diagnostics.passed_tests + diagnostics.failed_tests} tests passed`);
-      } catch (error) {
-        console.error('❌ Error running startup test harness:', error);
-      }
-    }, 5000);
+    // Initialize Google Sheets API
+    const sheets = google.sheets({ version: 'v4', auth: apiKey });
     
-    console.log('✅ Startup operations completed successfully');
+    // Quick validation of API key by calling a simple endpoint
+    sheets.spreadsheets.get({
+      spreadsheetId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms'  // Example Sheet ID from Google API docs
+    }, (err) => {
+      if (err) {
+        console.warn(`⚠️ Google API Key validation failed: ${err.message}`);
+      } else {
+        console.log('✅ Google API Key validated successfully');
+      }
+    });
+    
+    console.log('✅ Google Sheets API initialized successfully');
   } catch (error) {
-    console.error('❌ Error during startup operations:', error);
+    console.error('❌ Failed to initialize Google client:', error);
+  }
+}
+
+/**
+ * Run startup tests to verify system functionality
+ */
+async function runStartupTests(): Promise<void> {
+  try {
+    // Run self-test suite
+    const testResults = await simplifiedSelfTest.runAllTests();
+    
+    console.log(`🧪 Startup tests completed: ${testResults.passed_tests}/${testResults.total_tests} tests passed`);
+    
+    if (testResults.failed_tests > 0) {
+      console.warn('⚠️ Some startup tests failed. The system may not be fully operational.');
+    }
+  } catch (error) {
+    console.error('❌ Startup tests failed:', error);
   }
 }
 
@@ -42,13 +73,17 @@ export async function runStartupOperations(): Promise<void> {
  * Schedule periodic health checks
  */
 export function schedulePeriodicHealthChecks(): void {
-  // Run health checks every hour
+  console.log('⏰ Scheduling periodic health checks...');
+  
+  // Run health check every 30 minutes
   setInterval(async () => {
     try {
-      console.log('🔍 Running periodic health check...');
-      await testHarness.runAllTests();
+      // Run a lightweight self-test
+      await simplifiedSelfTest.runAllTests();
+      
+      console.log('🔄 Periodic health check completed');
     } catch (error) {
-      console.error('❌ Error during periodic health check:', error);
+      console.error('❌ Periodic health check failed:', error);
     }
-  }, 60 * 60 * 1000); // Every hour
+  }, 30 * 60 * 1000); // 30 minutes
 }
