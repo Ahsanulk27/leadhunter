@@ -356,6 +356,50 @@ export class SearchController {
     executionLog.final_status = "no_results";
     return null;
   }
+  
+  /**
+   * Format a company name into a domain name format
+   */
+  private formatDomain(companyName: string): string {
+    if (!companyName) return "example.com";
+    
+    return companyName
+      .toLowerCase()
+      .replace(/[^\w\s]/g, '')  // Remove special characters
+      .replace(/\s+/g, '')      // Remove whitespace
+      .replace(/^the/, '')      // Remove leading "the"
+      .replace(/inc$|llc$|corp$/, '') // Remove common business suffixes
+      + '.com';
+  }
+  
+  /**
+   * Convert an employee count number to a size range
+   */
+  private employeeCountToRange(employeeCount: number): string {
+    if (employeeCount === 0) return '';
+    if (employeeCount < 10) return '1-9 employees';
+    if (employeeCount < 50) return '10-49 employees';
+    if (employeeCount < 200) return '50-199 employees';
+    if (employeeCount < 500) return '200-499 employees';
+    if (employeeCount < 1000) return '500-999 employees';
+    return '1000+ employees';
+  }
+  
+  /**
+   * Check if a job title likely represents a decision maker
+   */
+  private isDecisionMakerTitle(title: string = ""): boolean {
+    if (!title) return false;
+    
+    const lowercaseTitle = title.toLowerCase();
+    const decisionMakerTitles = [
+      "owner", "founder", "ceo", "president", "director", 
+      "manager", "chief", "head", "vp", "vice president",
+      "principal", "partner", "executive"
+    ];
+    
+    return decisionMakerTitles.some(t => lowercaseTitle.includes(t));
+  }
 }
 
 // Export singleton instance

@@ -138,25 +138,30 @@ export class SelfTestService {
         // Diagnose the issue by analyzing the execution log
         const diagnosedIssue = this.diagnoseFailure(executionLog);
         
-        // Take a screenshot of the failed page if possible
+        // Capture diagnostic information using Axios instead of Puppeteer
         let htmlSnapshot: string | undefined;
         try {
-          const browser = await puppeteerWrapper.launch();
-          const page = await puppeteerWrapper.createPage(browser);
+          const axios = require('axios');
           const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(testCase.query + ' ' + testCase.location)}`;
-          await puppeteerWrapper.navigate(page, searchUrl);
           
-          // Wait for content to load
-          await page.waitForSelector('body', { timeout: 10000 });
+          // Use a more realistic user agent
+          const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36';
+          
+          const response = await axios.get(searchUrl, {
+            headers: {
+              'User-Agent': userAgent,
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.5'
+            },
+            timeout: 10000
+          });
           
           // Get page HTML for debugging
-          htmlSnapshot = await page.content();
+          htmlSnapshot = response.data;
           
           // Save HTML to disk for troubleshooting
           const htmlPath = path.join(this.logsDir, `failed-test-${testCase.name.replace(/\s+/g, '-')}-${Date.now()}.html`);
           fs.writeFileSync(htmlPath, htmlSnapshot);
-          
-          await browser.close();
         } catch (screenshotError) {
           console.error('Failed to capture HTML snapshot:', screenshotError);
         }
@@ -243,66 +248,114 @@ export class SelfTestService {
                             this.diagnoseFailure(previousResult.error);
       
       const autoCorrections: string[] = [];
+      const axios = require('axios');
       
-      // Try direct Puppeteer approach to bypass potential blocks
-      const browser = await puppeteerWrapper.launch();
-      const page = await puppeteerWrapper.createPage(browser);
+      // Try direct Axios approach with different source
+      autoCorrections.push("Using direct Axios requests to bypass Puppeteer issues");
       
-      // Use extra randomization for retry attempts
-      autoCorrections.push("Using enhanced Puppeteer configuration with additional randomization");
-      await page.waitForTimeout(Math.floor(Math.random() * 5000) + 2000); // Random delay
+      // Random delay to simulate more natural browsing pattern
+      await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 2000) + 1000));
       
       // Try Yelp as alternative source if Google Maps failed
       const yelpUrl = `https://www.yelp.com/search?find_desc=${encodeURIComponent(testCase.query)}&find_loc=${encodeURIComponent(testCase.location)}`;
-      await puppeteerWrapper.navigate(page, yelpUrl);
+      
+      // Use a randomized user agent
+      const userAgents = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/116.0'
+      ];
+      const randomUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
       
       autoCorrections.push(`Trying alternative source: Yelp at ${yelpUrl}`);
+      autoCorrections.push(`Using randomized user agent: ${randomUserAgent}`);
       
-      // Wait for content to load
-      await page.waitForSelector('body', { timeout: 15000 });
-      await page.waitForTimeout(3000); // Wait for dynamic content
+      // Make the request with appropriate headers
+      await axios.get(yelpUrl, {
+        headers: {
+          'User-Agent': randomUserAgent,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Referer': 'https://www.google.com/',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        },
+        timeout: 15000
+      });
       
-      // Get page HTML and extract business data
-      const html = await page.content();
+      // Get HTML response from axios
+      const response = await axios.get(yelpUrl, {
+        headers: {
+          'User-Agent': randomUserAgent,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5'
+        },
+        timeout: 15000
+      });
+      
+      const html = response.data;
       
       // Quick check if we're dealing with a CAPTCHA
       if (html.includes('captcha') || html.includes('CAPTCHA') || 
           html.includes('suspicious') || html.includes('unusual activity')) {
         autoCorrections.push("Detected CAPTCHA, will use more advanced evasion techniques");
-        // Implement advanced CAPTCHA avoidance here
+        // Add additional headers to subsequent requests
       }
       
-      // Extract businesses directly from the page
-      const extractedBusinesses = await page.evaluate(() => {
-        const businesses = [];
-        // Target Yelp business containers
-        const businessElements = document.querySelectorAll('[data-testid="serp-business-card"]');
-        
-        for (const element of businessElements) {
+      // Use cheerio to parse and extract businesses
+      const $ = cheerio.load(html);
+      const extractedBusinesses = [];
+      
+      // Try multiple selectors to handle different Yelp layouts
+      $('[data-testid="serp-business-card"]').each((i, el) => {
+        try {
+          const name = $(el).find('[data-testid="business-name"]').text().trim();
+          const categories = [];
+          $(el).find('[data-testid="business-categories"] a').each((j, catEl) => {
+            categories.push($(catEl).text().trim());
+          });
+          const address = $(el).find('[data-testid="business-address"]').text().trim();
+          
+          if (name) {
+            extractedBusinesses.push({
+              name,
+              categories: categories || [],
+              address: address || '',
+              source: 'Yelp (direct extract)'
+            });
+          }
+        } catch (err) {
+          console.error('Error extracting business data:', err);
+        }
+      });
+      
+      // Fallback to general business class if specific selectors didn't work
+      if (extractedBusinesses.length === 0) {
+        $('.businessName').each((i, el) => {
           try {
-            const name = element.querySelector('[data-testid="business-name"]')?.textContent?.trim();
-            const categories = Array.from(element.querySelectorAll('[data-testid="business-categories"] a'))
-              .map(el => el.textContent?.trim())
-              .filter(Boolean);
-            const address = element.querySelector('[data-testid="business-address"]')?.textContent?.trim();
+            const name = $(el).text().trim();
+            const businessEl = $(el).closest('.business');
+            const categories = [];
+            businessEl.find('.category-str-list a').each((j, catEl) => {
+              categories.push($(catEl).text().trim());
+            });
+            const address = businessEl.find('.address').text().trim();
             
             if (name) {
-              businesses.push({
+              extractedBusinesses.push({
                 name,
                 categories: categories || [],
                 address: address || '',
-                source: 'Yelp (direct extract)'
+                source: 'Yelp (fallback extract)'
               });
             }
           } catch (err) {
-            console.error('Error extracting business data:', err);
+            console.error('Error extracting fallback business data:', err);
           }
-        }
-        
-        return businesses;
-      });
+        });
+      }
       
-      await browser.close();
+      // No need to close browser since we're using Axios
       
       if (extractedBusinesses && extractedBusinesses.length > 0) {
         console.log(`✅ Retry test passed: Found ${extractedBusinesses.length} results for "${testCase.name}" using alternative method`);
