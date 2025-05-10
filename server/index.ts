@@ -15,6 +15,7 @@ import { registerBulkLeadRoutes } from './routes/bulk-leads';
 import { registerDirectDownloadRoutes } from './routes/direct-download';
 import { registerB2CRoutes } from './routes/b2c-routes';
 import { registerVerificationRoutes } from './routes/verification-routes';
+import { registerValidationRoutes } from './routes/validation-routes';
 import { GooglePlacesService } from './api/google-places-service';
 
 // Load environment variables
@@ -125,6 +126,9 @@ async function startServer(app: Express) {
     
     // Register verification routes
     registerVerificationRoutes(app);
+    
+    // Register validation routes for data quality assurance
+    registerValidationRoutes(app);
     
     // Clean up routes to avoid conflicts
     if (app._router && app._router.stack) {
