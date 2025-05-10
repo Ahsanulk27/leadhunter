@@ -1,4 +1,5 @@
 import { Router, Request, Response, Express } from 'express';
+import { storage } from '../storage';
 
 /**
  * Register direct download routes for the application
@@ -48,11 +49,26 @@ export function registerDirectDownloadRoutes(app: Express) {
       
       try {
         // Try to find in database by search term
-        // In a full implementation, we would query the database
         if (searchTerm) {
-          // Query database or in-memory cache
-          // For now we'll rely on the client to send the data directly
           console.log(`Attempting to prepare download for search: ${searchTerm}`);
+          
+          // Get the most recent search with this search term
+          const allSearches = await storage.getBulkLeadSearches();
+          const matchingSearch = allSearches
+            .filter(search => search.searchTerm === searchTerm)
+            .sort((a, b) => {
+              // Sort by creation date (newest first)
+              const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+              const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+              return dateB - dateA;
+            })[0];
+            
+          if (matchingSearch && matchingSearch.businessData) {
+            businesses = matchingSearch.businessData as any[];
+            console.log(`Found ${businesses.length} businesses for CSV export from search: ${searchTerm}`);
+          } else {
+            console.log(`No matching search found for term: ${searchTerm}`);
+          }
         }
       } catch (err) {
         console.error("Error retrieving data for download:", err);

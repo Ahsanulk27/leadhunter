@@ -275,9 +275,24 @@ const BulkLeadGenerator: React.FC = () => {
       // Now create a direct download URL to our server endpoint
       const downloadUrl = `/api/direct-download/csv?filename=${encodeURIComponent(filename)}&searchTerm=${encodeURIComponent(searchTerm)}`;
       
-      // Open this URL in the current window to trigger the download
-      // This will open the browser's native save dialog
-      window.open(downloadUrl, '_blank');
+      // Create an invisible iframe to trigger the download without navigating away
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      document.body.appendChild(iframe);
+      
+      // For iOS Safari, we'll use a direct approach
+      if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) {
+        // For iOS, window.open works better than iframe
+        window.open(downloadUrl, '_blank');
+      } else {
+        // For other browsers, use the iframe approach
+        iframe.src = downloadUrl;
+      }
+      
+      // Remove the iframe after download starts (after a delay)
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+      }, 5000); // 5 second timeout
       
       // Reset the exporting state and show success message
       // Use a slightly longer timeout since we're redirecting
