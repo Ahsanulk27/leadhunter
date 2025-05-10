@@ -138,32 +138,13 @@ export class SelfTestService {
         // Diagnose the issue by analyzing the execution log
         const diagnosedIssue = this.diagnoseFailure(executionLog);
         
-        // Capture diagnostic information using Axios instead of Puppeteer
-        let htmlSnapshot: string | undefined;
-        try {
-          const axios = require('axios');
-          const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(testCase.query + ' ' + testCase.location)}`;
-          
-          // Use a more realistic user agent
-          const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36';
-          
-          const response = await axios.get(searchUrl, {
-            headers: {
-              'User-Agent': userAgent,
-              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-              'Accept-Language': 'en-US,en;q=0.5'
-            },
-            timeout: 10000
-          });
-          
-          // Get page HTML for debugging
-          htmlSnapshot = response.data;
-          
-          // Save HTML to disk for troubleshooting
-          const htmlPath = path.join(this.logsDir, `failed-test-${testCase.name.replace(/\s+/g, '-')}-${Date.now()}.html`);
-          fs.writeFileSync(htmlPath, htmlSnapshot);
-        } catch (screenshotError) {
-          console.error('Failed to capture HTML snapshot:', screenshotError);
+        // Skip the diagnostic information step as it's less important than fixing
+        // the actual business scraping functionality
+        
+        // Just log the failure
+        console.log(`⚠️ Diagnostic information capture skipped for ${testCase.name}`);
+        } catch (error) {
+          console.error('Self-test diagnostic error:', error);
         }
         
         // Log the failure

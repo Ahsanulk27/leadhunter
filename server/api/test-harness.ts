@@ -4,7 +4,7 @@
  * and automatically diagnose and attempt to fix any issues
  */
 
-import { selfTestService } from './self-test';
+import { simplifiedSelfTestService } from './simplified-self-test';
 import fs from 'fs';
 import path from 'path';
 import { puppeteerWrapper } from './puppeteer-wrapper';
@@ -62,7 +62,7 @@ export class TestHarness {
       
       // 3. Run self tests on required test cases
       logStream.write(`${timestamp} - Running scraping self-tests\n`);
-      const testResults = await selfTestService.runAllTests();
+      const testResults = await simplifiedSelfTestService.runAllTests();
       this.lastTestResults = testResults;
       
       // Create a diagnostic report
