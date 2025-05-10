@@ -268,6 +268,10 @@ export class GooglePlacesService {
       const totalResultsFound = allResults.length;
       console.log(`📊 GooglePlacesService: Beginning to process ${totalResultsFound} total results`);
       
+      // Track businesses with zero contacts for validation
+      const businessesWithNoContacts: string[] = [];
+      const businessesWithNoContactMethods: string[] = [];
+      
       for (const place of allResults) {
         try {
           // Skip if we've already processed this place
@@ -282,30 +286,56 @@ export class GooglePlacesService {
           // Get the place details to get more information
           const details = await this.getPlaceDetails(place.place_id);
           
-          // Create the business data
+          // Generate contacts for this business
+          const businessContacts = this.generateContactsFromPlace(place, details);
+          
+          // Track businesses with no contacts for reporting
+          if (businessContacts.length === 0) {
+            console.warn(`⚠️ GooglePlacesService: No contacts could be generated for business "${place.name}" (${place.place_id})`);
+            businessesWithNoContacts.push(place.name);
+          }
+          
+          // Track businesses with no contact methods (phone or website)
+          if (!details.formatted_phone_number && !details.international_phone_number && !details.website) {
+            console.warn(`⚠️ GooglePlacesService: No contact methods found for business "${place.name}" (${place.place_id})`);
+            businessesWithNoContactMethods.push(place.name);
+          }
+          
+          // Create the business data with enhanced fields
           const business: BusinessData = {
             id: uuidv4(),
             name: place.name,
-            address: place.formatted_address || '',
-            phoneNumber: details.formatted_phone_number || '',
+            address: place.formatted_address || details.formatted_address || details.vicinity || '',
+            phoneNumber: details.formatted_phone_number || details.international_phone_number || '',
             website: details.website || '',
-            description: place.editorial_summary?.overview || '',
-            category: place.types?.join(', ') || '',
+            description: details.editorial_summary?.overview || place.editorial_summary?.overview || '',
+            category: place.types?.join(', ') || details.types?.join(', ') || '',
             rating: place.rating,
             reviewCount: place.user_ratings_total,
             imageUrl: place.photos?.[0]?.photo_reference 
               ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${place.photos[0].photo_reference}&key=${this.apiKey}`
-              : undefined,
+              : (details.photos?.[0]?.photo_reference 
+                ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${details.photos[0].photo_reference}&key=${this.apiKey}`
+                : undefined),
             source: 'google-places-api',
             sourceUrl: `https://www.google.com/maps/place/?q=place_id:${place.place_id}`,
             scrapedDate: new Date(),
-            contacts: this.generateContactsFromPlace(place, details)
+            contacts: businessContacts
           };
           
           businesses.push(business);
         } catch (error) {
           console.error(`❌ GooglePlacesService: Error processing place:`, error);
         }
+      }
+      
+      // Log a summary of businesses with no contacts if any exist
+      if (businessesWithNoContacts.length > 0) {
+        console.warn(`⚠️ GooglePlacesService: ${businessesWithNoContacts.length} businesses had no extractable contacts`);
+      }
+      
+      if (businessesWithNoContactMethods.length > 0) {
+        console.warn(`⚠️ GooglePlacesService: ${businessesWithNoContactMethods.length} businesses had no contact methods (phone/website)`);
       }
       
       // Log the final business count vs. initial results count
@@ -315,6 +345,9 @@ export class GooglePlacesService {
       console.log(`📊 GooglePlacesService: Successfully processed ${totalProcessedBusinesses}/${totalResultsFound} businesses`);
       console.log(`📊 GooglePlacesService: Generated a total of ${totalContactsGenerated} contacts`);
       
+      // Calculate average contacts per business for reporting
+      const avgContactsPerBusiness = totalContactsGenerated / (totalProcessedBusinesses || 1);
+      
       return { 
         businesses, 
         sources: ['google-places-api'],
@@ -322,7 +355,11 @@ export class GooglePlacesService {
           totalResultsFound,
           totalProcessedBusinesses,
           totalContactsGenerated,
-          pagesRetrieved: pageCount
+          pagesRetrieved: pageCount,
+          businessesWithNoContacts: businessesWithNoContacts.length,
+          businessesWithNoContactMethods: businessesWithNoContactMethods.length,
+          averageContactsPerBusiness: avgContactsPerBusiness.toFixed(1),
+          quotaStatus: this.getQuotaUsage().status
         }
       };
     } catch (error) {
