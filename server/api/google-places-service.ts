@@ -84,6 +84,12 @@ export class GooglePlacesService {
   async searchBusinesses(query: string, location?: string, maxResults: number = 100): Promise<{
     businesses: BusinessData[];
     sources: string[];
+    meta?: {
+      totalResultsFound: number;
+      totalProcessedBusinesses: number;
+      totalContactsGenerated: number;
+      pagesRetrieved: number;
+    };
     error?: {
       code: string;
       message: string;
@@ -258,7 +264,7 @@ export class GooglePlacesService {
       
       // Log the final business count vs. initial results count
       const totalProcessedBusinesses = businesses.length;
-      const totalContactsGenerated = businesses.reduce((sum, business) => sum + business.contacts.length, 0);
+      const totalContactsGenerated = businesses.reduce((sum, business) => sum + (business.contacts?.length || 0), 0);
       
       console.log(`📊 GooglePlacesService: Successfully processed ${totalProcessedBusinesses}/${totalResultsFound} businesses`);
       console.log(`📊 GooglePlacesService: Generated a total of ${totalContactsGenerated} contacts`);

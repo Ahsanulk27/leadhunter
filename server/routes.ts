@@ -666,13 +666,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           total_count: result.businesses.length,
           page: page,
           limit: limit,
-          total_pages: Math.ceil(result.businesses.length / limit)
+          total_pages: Math.ceil(result.businesses.length / limit),
+          // Include the detailed metadata about the fetching process from the Google Places service
+          ...(result.meta || {}),
+          total_contacts_generated: result.businesses.reduce((count, b) => count + (b.contacts?.length || 0), 0)
         }
       };
       
       // Add these properties to help with type checking in the rest of the code
       (scrapingResult as any).totalCount = result.businesses.length;
       (scrapingResult as any).sources = result.sources;
+      
+      // Log detailed metrics about the search operation
+      console.log(`📊 [${executionId}] Search metrics: ${result.businesses.length} businesses found`);
+      if (result.meta) {
+        console.log(`📊 [${executionId}] API metrics: ${result.meta.totalProcessedBusinesses}/${result.meta.totalResultsFound} businesses processed from ${result.meta.pagesRetrieved} pages`);
+        console.log(`📊 [${executionId}] Generated ${result.meta.totalContactsGenerated} total contacts`);
+      }
       
       // Calculate execution time
       const executionTime = Date.now() - startTime;
