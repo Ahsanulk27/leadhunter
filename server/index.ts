@@ -103,8 +103,13 @@ async function startServer(app: Express) {
     // Create HTTP server
     const server = http.createServer(app);
     
-    // Register API routes
+    // Register API routes first
     await registerRoutes(app);
+    
+    // Remove the default root handler that was blocking the React app
+    app._router.stack = app._router.stack.filter((layer: any) => {
+      return !(layer.route && layer.route.path === '/');
+    });
     
     // Setup Vite development environment
     if (process.env.NODE_ENV === 'development') {
