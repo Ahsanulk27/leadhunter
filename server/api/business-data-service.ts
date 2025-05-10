@@ -85,44 +85,71 @@ export class BusinessDataService {
   
   // Search companies by industry and location
   private async searchByIndustryAndLocation(params: BusinessSearchParams, results: any) {
-    // For demo purposes - in production you would use:
-    // 1. Google Places API (has free tier)
-    // 2. Yelp Fusion API (has free tier)
-    // 3. Local business registries with public APIs
-    
     try {
-      // Example of how you would use the Google Places API:
-      // You'd need to sign up for a Google Cloud account and enable Places API
-      /*
-      const response = await axios.get(
-        'https://maps.googleapis.com/maps/api/place/textsearch/json',
-        {
-          params: {
-            query: `${params.industry} businesses in ${params.location}`,
-            key: process.env.GOOGLE_PLACES_API_KEY
+      // Use the Google Places API through our service
+      const { googlePlacesService } = await import('./google-places-service');
+      const { googleBusinessScraper } = await import('./google-business-scraper');
+      
+      console.log(`Performing industry search for ${params.industry} in ${params.location}`);
+      
+      // Search for businesses in the specified industry and location
+      const searchQuery = `${params.industry} businesses in ${params.location || 'United States'}`;
+      let businesses = [];
+      
+      try {
+        // First try the Places API
+        businesses = await googlePlacesService.searchBusinesses({
+          industry: params.industry,
+          location: params.location
+        });
+      } catch (error) {
+        console.log("Places API search failed, trying scraper...");
+      }
+      
+      // If Places API didn't return results, try the scraper
+      if (!businesses || businesses.length === 0) {
+        try {
+          businesses = await googleBusinessScraper.searchBusinesses(searchQuery);
+        } catch (error) {
+          console.log("Scraper search failed:", error);
+        }
+      }
+      
+      if (businesses && businesses.length > 0) {
+        // Use the first business from the results
+        const topBusiness = businesses[0];
+        
+        // Get more details if available
+        let businessDetails = topBusiness;
+        if (topBusiness.place_id) {
+          try {
+            const details = await googlePlacesService.getBusinessDetails(topBusiness.place_id);
+            if (details) {
+              businessDetails = { ...topBusiness, ...details };
+            }
+          } catch (error) {
+            console.log("Could not get business details:", error);
           }
         }
-      );
-      
-      if (response.data && response.data.results && response.data.results.length > 0) {
-        const place = response.data.results[0];
+        
+        // Update the results with the business information
         results.company = {
-          name: place.name,
-          address: place.formatted_address,
-          location: params.location,
-          industry: params.industry,
-          // And other fields you can extract
+          name: businessDetails.name || topBusiness.name,
+          industry: params.industry || '',
+          location: params.location || businessDetails.vicinity || '',
+          size: params.size || '',
+          address: businessDetails.formatted_address || businessDetails.vicinity || '',
+          website: businessDetails.website || ''
+        };
+      } else {
+        // If we didn't find any businesses, populate with industry information
+        results.company = {
+          name: `${params.industry} Business`,
+          industry: params.industry || '',
+          location: params.location || 'United States',
+          size: params.size || '',
         };
       }
-      */
-      
-      // For this demo, we'll just set the search parameters to show what was searched for
-      results.company = {
-        name: params.companyName || `Leading ${params.industry} Business`,
-        industry: params.industry || 'Business Services',
-        location: params.location || 'United States',
-        size: params.size || '11-50'
-      };
     } catch (error) {
       console.log('Error in industry search:', error);
     }
@@ -131,63 +158,116 @@ export class BusinessDataService {
   // Find contacts at a company using publicly available data sources
   private async findCompanyContacts(companyName: string, prioritizeDecisionMakers: boolean, results: any) {
     try {
-      // In production, you would:
-      // 1. Use LinkedIn's public API or scraper tools (with proper permissions)
-      // 2. Use Hunter.io for email discovery (has free tier)
-      // 3. Use GitHub API for tech companies
+      // Import our scraper services
+      const { googleBusinessScraper } = await import('./google-business-scraper');
+      const { scraperService } = await import('./scraper-service');
       
-      // For educational purposes, we'll demonstrate with hunter.io approach
-      // (would need API key in production)
-      /*
-      const domain = results.company.domain || this.formatDomain(companyName);
-      const response = await axios.get(
-        `https://api.hunter.io/v2/domain-search?domain=${domain}`,
-        {
-          params: {
-            limit: 10,
-            api_key: process.env.HUNTER_API_KEY
+      console.log(`Looking for contacts at ${companyName}...`);
+      
+      // Get business contacts first
+      let contacts = [];
+      try {
+        // Try to get contacts from Google Business listings
+        const businessInfo = await googleBusinessScraper.getBusinessContacts(companyName, results.company.location);
+        
+        if (businessInfo && businessInfo.contacts && businessInfo.contacts.length > 0) {
+          contacts = businessInfo.contacts;
+          
+          // If we have a website, extract more contacts from there
+          if (businessInfo.website || results.company.website) {
+            const domain = businessInfo.website || results.company.website;
+            console.log(`Extracting additional contact information from: ${domain}`);
+            
+            // Scrape the website for contact information
+            const websiteData = await scraperService.scrapeCompanyWebsite(domain);
+            
+            // Get more contacts from the website
+            try {
+              const websiteContacts = await googleBusinessScraper.extractContactsFromWebsite(domain);
+              if (websiteContacts && websiteContacts.length > 0) {
+                // Add any new contacts
+                contacts = [...contacts, ...websiteContacts];
+              }
+            } catch (error) {
+              console.log("Error extracting contacts from website:", error);
+            }
+            
+            // Enhance existing contacts with emails/phones from the website
+            contacts.forEach((contact: any, index: number) => {
+              if (!contact.email && websiteData.emails && websiteData.emails[index]) {
+                contact.email = websiteData.emails[index];
+              }
+              if (!contact.companyPhone && websiteData.phones && websiteData.phones[index]) {
+                contact.companyPhone = websiteData.phones[index];
+              }
+            });
           }
         }
-      );
-      
-      if (response.data && response.data.data && response.data.data.emails) {
-        results.contacts = response.data.data.emails.map(email => ({
-          name: `${email.first_name} ${email.last_name}`,
-          position: email.position || 'Employee',
-          email: email.value,
-          companyPhone: '',
-          personalPhone: '',
-          isDecisionMaker: this.isDecisionMakerTitle(email.position || ''),
-          linkedIn: null,
-          twitter: null
-        }));
+      } catch (error) {
+        console.log("Error getting business contacts:", error);
       }
-      */
       
-      // For the demo - we would want to show that we're looking for real data
-      results.contacts = [
-        {
-          id: 1,
-          name: `[Public data will show real names]`,
-          position: `[Real title from LinkedIn/public sources]`,
-          email: `[Real email address found via Hunter.io]`,
-          companyPhone: `[Contact info based on web search]`,
-          personalPhone: prioritizeDecisionMakers ? `[Found through data aggregation]` : null,
-          isDecisionMaker: true,
-          influence: 85,
-          notes: `Integration with real data APIs will provide accurate contact details.`
-        },
-        {
-          id: 2,
-          name: `[Second contact name]`,
-          position: `[Position from company website/LinkedIn]`,
-          email: `[Email pattern matches company format]`,
-          companyPhone: `[Company main line with extension]`,
-          isDecisionMaker: false,
-          influence: 45,
-          notes: `Complete this integration by adding API keys from public data sources.`
+      // If we didn't find any contacts, try searching for company staff
+      if (contacts.length === 0) {
+        try {
+          // Try to find company employees on public profiles
+          const employees = await scraperService.findCompanyEmployeesOnLinkedIn(companyName, prioritizeDecisionMakers);
+          if (employees && employees.length > 0) {
+            contacts = employees;
+          }
+        } catch (error) {
+          console.log("Error finding company employees:", error);
         }
-      ];
+      }
+      
+      // If we still don't have contacts, try business directories
+      if (contacts.length === 0) {
+        try {
+          // Search business directories for the company
+          const directoryData = await scraperService.scrapeBusinessDirectories(companyName, results.company.location);
+          if (directoryData && directoryData.contacts && directoryData.contacts.length > 0) {
+            contacts = directoryData.contacts;
+          }
+        } catch (error) {
+          console.log("Error scraping business directories:", error);
+        }
+      }
+      
+      // Process the contacts - remove duplicates and mark decision makers
+      const processedContacts = contacts.map((contact: any, index: number) => {
+        // Determine if this person is a decision maker based on title
+        const isDecisionMaker = this.isDecisionMakerTitle(contact.position || contact.title);
+        
+        return {
+          id: index + 1,
+          name: contact.name || `Contact ${index + 1}`,
+          position: contact.position || contact.title || 'Employee',
+          email: contact.email || null,
+          companyPhone: contact.companyPhone || contact.phone || null,
+          personalPhone: contact.personalPhone || null,
+          isDecisionMaker: isDecisionMaker,
+          influence: isDecisionMaker ? 85 : 45,
+          notes: ''
+        };
+      });
+      
+      // Update the results with our contacts
+      results.contacts = processedContacts;
+      
+      // If we still have no contacts, add at least one placeholder
+      if (results.contacts.length === 0) {
+        results.contacts = [{
+          id: 1,
+          name: `Contact at ${companyName}`,
+          position: 'Employee',
+          email: null,
+          companyPhone: null,
+          personalPhone: null,
+          isDecisionMaker: false,
+          influence: 50,
+          notes: 'No public contacts found. Try searching for a different company.'
+        }];
+      }
     } catch (error) {
       console.log('Error finding contacts:', error);
     }

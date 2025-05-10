@@ -151,10 +151,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // We ONLY use real data - no fallbacks to simulated data
       if (!scrapedData) {
-        return res.status(404).json({ 
-          error: "No real business data found for this search", 
-          message: "We only provide 100% real information. Try searching for a specific company name that has publicly available contact information."
-        });
+        // If no industry provided, prompt for more information
+        if (!industry && !company) {
+          return res.status(404).json({ 
+            error: "Missing search criteria", 
+            message: "Please provide either an industry or a company name to search for leads."
+          });
+        }
+        
+        // If industry was provided but no results, try to find businesses for that industry
+        if (industry && !company) {
+          try {
+            // Import our business data service
+            const { businessDataService } = await import('./api/business-data-service');
+            
+            // Try to find businesses in that industry
+            console.log(`Searching for businesses in the ${industry} industry...`);
+            const industryResults = await businessDataService.fetchBusinessData({
+              industry,
+              location,
+              position,
+              size,
+              prioritizeDecisionMakers: prioritizeDecisionMakers || false
+            });
+            
+            if (industryResults && industryResults.company && industryResults.contacts) {
+              scrapedData = {
+                name: industryResults.company.name,
+                industry: industryResults.company.industry || industry,
+                location: industryResults.company.location || location,
+                size: industryResults.company.size,
+                address: industryResults.company.address,
+                contacts: industryResults.contacts
+              };
+            }
+          } catch (error) {
+            console.error("Error finding industry leads:", error);
+          }
+        }
+        
+        // If we still don't have any data
+        if (!scrapedData) {
+          return res.status(404).json({ 
+            error: "No real business data found for this search", 
+            message: "Try searching with different criteria, such as a more specific industry or a location. You can also search for a specific company name that has publicly available contact information."
+          });
+        }
       }
 
       // Store company information
