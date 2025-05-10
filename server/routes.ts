@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import * as cheerio from "cheerio";
 import axios from "axios";
 import { generateIndustryContacts } from "./routes-industry";
+import { BusinessData } from "./controllers/search-controller";
 import { 
   insertCompanySchema, insertContactSchema, insertSearchHistorySchema,
   type InsertCompany, type InsertContact, type InsertSearchHistory,
@@ -237,6 +238,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Self-test endpoint to verify scraping functionality
+  app.get("/scrape/self-test", async (req: Request, res: Response) => {
+    try {
+      console.log(`🧪 Starting self-test of scraping functionality`);
+      
+      // Import self-test service
+      const { selfTestService } = await import('./api/self-test');
+      
+      // Run all tests
+      const testResults = await selfTestService.runAllTests();
+      const testReport = selfTestService.getTestReport();
+      
+      return res.status(200).json({
+        status: testReport.passed_tests === testReport.total_tests ? "success" : "partial_success",
+        timestamp: new Date().toISOString(),
+        test_report: testReport
+      });
+    } catch (error) {
+      console.error("❌ Error during self-test:", error);
+      return res.status(500).json({
+        error: "Self-test error",
+        message: "An error occurred while testing the scraping functionality",
+        details: (error as Error).message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+  
   // Dedicated /scrape API endpoint for direct access with query parameters
   app.get("/scrape", async (req: Request, res: Response) => {
     try {
@@ -346,7 +375,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Calculate pagination metadata
-      const totalResults = scrapingResult.totalCount || scrapingResult.businesses.length;
+      const totalResults = scrapingResult.totalCount;
       const totalPages = Math.ceil(totalResults / limit);
       
       console.log(`✅ [${executionId}] Successfully scraped real business data: ${scrapingResult.businesses.length} results in ${executionTime}ms`);
@@ -357,7 +386,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timestamp: new Date().toISOString(),
         execution_id: executionId,
         execution_time_ms: executionTime,
-        data: scrapingResult.businesses.map((business: any) => ({
+        data: scrapingResult.businesses.map((business: BusinessData) => ({
           business_name: business.name,
           industry: business.industry,
           location: business.location,
@@ -382,7 +411,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             query,
             location
           },
-          scrape_sources: scrapingResult.sources || ["Google Maps", "Yelp", "Yellow Pages"],
+          scrape_sources: scrapingResult.sources,
           execution_log: executionLog
         }
       });

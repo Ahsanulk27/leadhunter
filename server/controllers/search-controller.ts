@@ -267,11 +267,23 @@ export class SearchController {
       
       console.log(`✅ SearchController: Successfully created business data for ${scrapedData.name}`);
       
+      // Add to our collection of businesses
+      allBusinesses.push(scrapedData);
       
-      return scrapedData;
+      // Format the result as a ScrapingResult
+      return {
+        businesses: allBusinesses,
+        totalCount: allBusinesses.length,
+        sources: sourcesSucceeded,
+        page: params.page || 1,
+        limit: params.limit || 10,
+        executionLog
+      };
     }
     
     // No real businesses found
+    console.log(`❌ SearchController: No businesses found from any source`);
+    executionLog.final_status = "no_results";
     return null;
   }
 }
