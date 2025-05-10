@@ -13,6 +13,7 @@ import http from 'http';
 import { registerRoutes } from './routes';
 import { registerBulkLeadRoutes } from './routes/bulk-leads';
 import { registerDirectDownloadRoutes } from './routes/direct-download';
+import { registerB2CRoutes } from './routes/b2c-routes';
 import { GooglePlacesService } from './api/google-places-service';
 
 // Load environment variables
@@ -117,6 +118,9 @@ async function startServer(app: Express) {
     
     // Register direct download routes for CSV exports on mobile
     registerDirectDownloadRoutes(app);
+    
+    // Register B2C lead generation routes
+    registerB2CRoutes(app);
     
     // Clean up routes to avoid conflicts
     if (app._router && app._router.stack) {

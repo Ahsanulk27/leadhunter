@@ -1,0 +1,48 @@
+[
+  {
+    "id": "env",
+    "type": "list",
+    "name": "Environment Variables",
+    "status": "active"
+  },
+  {
+    "id": "brightdata",
+    "type": "service",
+    "name": "Bright Data",
+    "url": "https://api.brightdata.com/proxy/get",
+    "refreshInterval": 60,
+    "status": "inactive"
+  },
+  {
+    "id": "smartproxy",
+    "type": "service",
+    "name": "Smartproxy",
+    "url": "https://api.smartproxy.com/v1/proxies",
+    "refreshInterval": 60,
+    "status": "inactive"
+  },
+  {
+    "id": "proxyseeker",
+    "type": "api",
+    "name": "ProxySeeker API",
+    "url": "https://api.proxyseeker.io/premium",
+    "refreshInterval": 60,
+    "status": "inactive"
+  },
+  {
+    "id": "geonode",
+    "type": "api",
+    "name": "GeoNode Free Proxy API",
+    "url": "https://proxylist.geonode.com/api/proxy-list",
+    "refreshInterval": 15,
+    "status": "active"
+  },
+  {
+    "id": "pubproxy",
+    "type": "api",
+    "name": "PubProxy API",
+    "url": "http://pubproxy.com/api/proxy",
+    "refreshInterval": 10,
+    "status": "active"
+  }
+]

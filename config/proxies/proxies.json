@@ -1,0 +1,38 @@
+[
+  {
+    "id": "manual-1",
+    "protocol": "http",
+    "host": "34.23.45.67",
+    "port": 8080,
+    "sourceId": "manual",
+    "successCount": 0,
+    "failureCount": 0,
+    "avgResponseTime": 0,
+    "status": "active",
+    "tags": ["manual"]
+  },
+  {
+    "id": "manual-2",
+    "protocol": "http",
+    "host": "45.123.56.78",
+    "port": 3128,
+    "sourceId": "manual",
+    "successCount": 0,
+    "failureCount": 0,
+    "avgResponseTime": 0,
+    "status": "active",
+    "tags": ["manual"]
+  },
+  {
+    "id": "manual-3",
+    "protocol": "http",
+    "host": "67.231.12.45",
+    "port": 8888,
+    "sourceId": "manual",
+    "successCount": 0,
+    "failureCount": 0,
+    "avgResponseTime": 0,
+    "status": "active",
+    "tags": ["manual"]
+  }
+]

@@ -1,102 +1,79 @@
 /**
- * Batch Scraping Script for Lead Hunter
- * 
- * This script sends a batch scraping request to the Lead Hunter API
- * to generate leads for multiple services across multiple locations.
+ * B2C Batch Scraper for NexLead Hunter
+ * This script sends batch scraping requests for cleaning services
  * 
  * Usage:
- * 1. Start the Lead Hunter server
- * 2. Run this script with Node.js: node batch-scraper.mjs
- * 3. Results will be saved to the batch_results folder
+ * node batch-scraper.mjs
  */
 
 import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Configuration
-const API_URL = 'http://localhost:5000/api/b2c/batch';
+const API_URL = 'http://localhost:5000/api/b2c/batch-search';
+const USE_PROXIES = true; // Set to false if you don't have any proxies configured
 
-// Services for cleaning business
-const services = [
-  'carpet cleaning',
-  'window cleaning',
+// Services to search for
+const SERVICES = [
   'move-out cleaning',
+  'move-in cleaning',
+  'turnover cleaning',
   'deep cleaning',
-  'maid services',
-  'home move in move out clean',
-  'turnover clean'
+  'apartment cleaning'
 ];
 
-// Target locations
-const locations = [
+// Locations to search in
+const LOCATIONS = [
   'Miami, Florida',
   'Orlando, Florida',
+  'Tampa, Florida',
   'Brooklyn, New York',
   'Queens, New York',
   'Dallas, Texas',
   'Austin, Texas'
 ];
 
-// Options for the scraper
-const options = {
-  useProxies: true,
-  delayBetweenQueries: 15000, // 15 seconds between queries
-  maxResults: 50,
-  onlyDecisionMakers: true,
-  saveHtml: false,
-  delayMin: 2000,
-  delayMax: 5000
-};
+// Get the directory of the current module
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Execute the batch scraping
-async function runBatchScrape() {
-  console.log('╔════════════════════════════════════════════════════╗');
-  console.log('║            LEAD HUNTER BATCH SCRAPER               ║');
-  console.log('╚════════════════════════════════════════════════════╝');
-  console.log('Starting batch scraping process for cleaning services...\n');
-  
-  console.log('Services to search:');
-  services.forEach(service => console.log(` • ${service}`));
-  
-  console.log('\nLocations to search:');
-  locations.forEach(location => console.log(` • ${location}`));
-  
-  console.log(`\nTotal jobs: ${services.length * locations.length}`);
-  console.log('Estimated time: ~30 seconds per job\n');
+// Main function to run the batch scraper
+async function runBatchScraper() {
+  console.log('Starting B2C Batch Scraper for NexLead Hunter');
+  console.log(`Services: ${SERVICES.join(', ')}`);
+  console.log(`Locations: ${LOCATIONS.join(', ')}`);
+  console.log(`Using proxies: ${USE_PROXIES ? 'Yes' : 'No'}`);
   
   try {
-    console.log('Submitting batch job to the server...');
-    
+    // Make the batch search request
     const response = await axios.post(API_URL, {
-      services,
-      locations,
-      options
+      services: SERVICES,
+      locations: LOCATIONS,
+      maxResults: 50,
+      onlyDecisionMakers: true,
+      useProxies: USE_PROXIES
     });
     
-    console.log('\n✅ Batch scraping job submitted successfully!');
-    console.log(`\nBatch ID: ${response.data.batchId}`);
-    console.log(`Estimated completion time: ${response.data.estimatedTime}`);
+    const { batchId, status, message, outputFile } = response.data;
     
-    console.log('\nThe scraping process is running in the background.');
-    console.log('Results will be saved to the batch_results folder in Excel format.');
-    console.log('Each file will be named: service_location_leads.xlsx');
+    console.log(`Batch ID: ${batchId}`);
+    console.log(`Status: ${status}`);
+    console.log(`Message: ${message}`);
+    console.log(`Output will be saved to: ${outputFile}`);
     
-    console.log('\nYou can continue to use the application while the batch job runs.');
-    console.log('To view results, check the batch_results folder after completion.');
+    // Since this is a background job, we'll need to poll for status
+    console.log('\nBatch scraping is running in the background.');
+    console.log('The server will process all requests and save results to the batch_results directory.');
+    console.log('This may take some time depending on the number of searches.');
+    
   } catch (error) {
-    console.error('\n❌ Error submitting batch scraping job:');
-    console.error(error.message);
-    
+    console.error('Error starting batch scrape:', error.message);
     if (error.response) {
-      console.error('\nServer response:');
-      console.error(error.response.data);
+      console.error('Server response:', error.response.data);
     }
-    
-    console.log('\nTroubleshooting tips:');
-    console.log(' • Make sure the Lead Hunter server is running');
-    console.log(' • Check that port 5000 is accessible');
-    console.log(' • Verify network connectivity');
   }
 }
 
-// Run the batch scraping
-runBatchScrape();
+// Run the batch scraper
+runBatchScraper();
