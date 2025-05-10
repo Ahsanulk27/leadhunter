@@ -57,9 +57,20 @@ export class GooglePlacesService {
       return response.data.results;
       */
       
-      // For this demo, return an empty array to indicate we should get data
-      // from publicly available sources
-      return [];
+      // For now, return placeholder results based on the search parameters
+      // This helps testing when APIs aren't available
+      const placeholderResults = [
+        {
+          place_id: "placeholder-id-1",
+          name: params.companyName || `${params.industry || 'Business'} Company`,
+          formatted_address: params.location ? `Address in ${params.location}` : "123 Main St",
+          vicinity: params.location || "City Center",
+          business_status: "OPERATIONAL",
+          types: params.industry ? [params.industry.toLowerCase().replace(/ /g, '_')] : ["business"],
+        }
+      ];
+      
+      return placeholderResults;
     } catch (error) {
       console.error('Error searching Google Places:', error);
       return [];
@@ -88,8 +99,25 @@ export class GooglePlacesService {
       return response.data.result;
       */
       
-      // For this demo, return null to indicate we need to use other sources
-      return null;
+      // For testing, return placeholder business details
+      return {
+        place_id: placeId,
+        name: "Business Name",
+        formatted_address: "123 Business Address St, City, Country",
+        formatted_phone_number: "(123) 456-7890",
+        website: "https://example.com",
+        opening_hours: {
+          weekday_text: [
+            "Monday: 9:00 AM – 5:00 PM",
+            "Tuesday: 9:00 AM – 5:00 PM",
+            "Wednesday: 9:00 AM – 5:00 PM",
+            "Thursday: 9:00 AM – 5:00 PM",
+            "Friday: 9:00 AM – 5:00 PM",
+            "Saturday: Closed",
+            "Sunday: Closed",
+          ]
+        }
+      };
     } catch (error) {
       console.error('Error getting place details:', error);
       return null;

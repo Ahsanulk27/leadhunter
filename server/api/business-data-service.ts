@@ -94,7 +94,7 @@ export class BusinessDataService {
       
       // Search for businesses in the specified industry and location
       const searchQuery = `${params.industry} businesses in ${params.location || 'United States'}`;
-      let businesses = [];
+      let businesses: Array<any> = [];
       
       try {
         // First try the Places API
@@ -165,7 +165,7 @@ export class BusinessDataService {
       console.log(`Looking for contacts at ${companyName}...`);
       
       // Get business contacts first
-      let contacts = [];
+      let contacts: Array<any> = [];
       try {
         // Try to get contacts from Google Business listings
         const businessInfo = await googleBusinessScraper.getBusinessContacts(companyName, results.company.location);
