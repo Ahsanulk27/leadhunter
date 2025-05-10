@@ -228,6 +228,17 @@ const BulkLeadGenerator: React.FC = () => {
     }
   };
   
+  // Helper function to escape CSV values
+  const escapeCsvValue = (value: any): string => {
+    if (value === null || value === undefined) return '""';
+    
+    // Convert to string and escape double quotes by doubling them
+    const stringValue = String(value).replace(/"/g, '""');
+    
+    // Wrap in quotes
+    return `"${stringValue}"`;
+  };
+  
   // Export for direct iPhone download
   const exportToCSV = async () => {
     if (!results || !results.businesses || results.businesses.length === 0) {
@@ -264,42 +275,21 @@ const BulkLeadGenerator: React.FC = () => {
       if (isIOS) {
         console.log("iOS device detected, using direct download approach");
         
-        // For iOS, we'll use a direct window.location.href approach which works better
-        const exportUrl = `/api/bulk-leads/export-csv?filename=${encodeURIComponent(filename)}`;
+        // For iOS, use a simple direct URL approach with no complex data passing
+        // This is the most reliable way for mobile Safari
+        const exportUrl = `/api/bulk-leads/direct-download?filename=${encodeURIComponent(filename)}`;
         
-        // Use form submission for POST data with file download
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = exportUrl;
-        form.target = '_blank'; // Open in new tab
+        // Alert user about the download
+        alert('CSV download started! Check your Files app shortly.');
         
-        // Add hidden fields for data - need separate fields for iOS to handle properly
-        const searchTermField = document.createElement('input');
-        searchTermField.type = 'hidden';
-        searchTermField.name = 'searchTerm';
-        searchTermField.value = searchTerm;
-        form.appendChild(searchTermField);
+        // Use window.location or window.open
+        if (true) { // Using direct location.href - more reliable on iOS
+          window.location.href = exportUrl;
+        } else { // Alternative with window.open
+          window.open(exportUrl, '_blank');
+        }
         
-        const locationsField = document.createElement('input');
-        locationsField.type = 'hidden';
-        locationsField.name = 'locations';
-        locationsField.value = JSON.stringify(selectedLocations);
-        form.appendChild(locationsField);
-        
-        // The businesses need to be a hidden field
-        const businessesField = document.createElement('input');
-        businessesField.type = 'hidden';
-        businessesField.name = 'businesses';
-        businessesField.value = JSON.stringify(results.businesses);
-        
-        form.appendChild(businessesField);
-        document.body.appendChild(form);
-        form.submit();
-        
-        // Clean up the form
-        setTimeout(() => {
-          document.body.removeChild(form);
-        }, 1000);
+        // No cleanup needed for the direct URL approach
       } else {
         // For non-iOS devices, use the regular fetch approach
         const dataResponse = await fetch('/api/bulk-leads/export-csv', {

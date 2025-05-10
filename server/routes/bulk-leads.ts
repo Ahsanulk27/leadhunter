@@ -461,6 +461,93 @@ export function registerBulkLeadRoutes(app: Express, googlePlacesService: Google
     }
   });
   
+  // Direct download endpoint for iOS - completely self-contained
+  router.get('/direct-download', async (req: Request, res: Response) => {
+    try {
+      // Get filename from query params
+      let filename = req.query.filename as string;
+      if (!filename) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        filename = `nexlead_export_${timestamp}.csv`;
+      }
+      
+      // Simple sample data for diagnostics
+      const sampleData = [
+        {
+          name: "Test Business LLC",
+          category: "Test Industry",
+          address: "123 Test Street, Test City",
+          phoneNumber: "555-123-4567",
+          website: "https://testbusiness.com",
+          contacts: [
+            {
+              name: "Test Contact",
+              position: "CEO",
+              email: "test@testbusiness.com",
+              phoneNumber: "555-987-6543",
+              isDecisionMaker: true
+            }
+          ]
+        }
+      ];
+      
+      // Set headers for file download
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      
+      // Generate CSV content
+      let csvRows = [];
+      
+      // Create header row
+      csvRows.push(['Company Name', 'Industry', 'Address', 'Phone', 'Website', 
+                   'Contact Name', 'Contact Position', 'Contact Email', 
+                   'Contact Phone', 'Is Decision Maker'].join(','));
+      
+      // Add data rows
+      sampleData.forEach(business => {
+        if (!business.contacts || business.contacts.length === 0) {
+          // If no contacts, add one row with just business info
+          csvRows.push([
+            escapeCsvValue(business.name || ''),
+            escapeCsvValue(business.category || ''),
+            escapeCsvValue(business.address || ''),
+            escapeCsvValue(business.phoneNumber || ''),
+            escapeCsvValue(business.website || ''),
+            '', '', '', '', ''
+          ].join(','));
+        } else {
+          // Add a row for each contact
+          business.contacts.forEach(contact => {
+            csvRows.push([
+              escapeCsvValue(business.name || ''),
+              escapeCsvValue(business.category || ''),
+              escapeCsvValue(business.address || ''),
+              escapeCsvValue(business.phoneNumber || ''),
+              escapeCsvValue(business.website || ''),
+              escapeCsvValue(contact.name || ''),
+              escapeCsvValue(contact.position || ''),
+              escapeCsvValue(contact.email || ''),
+              escapeCsvValue(contact.phoneNumber || ''),
+              escapeCsvValue(contact.isDecisionMaker ? 'Yes' : 'No')
+            ].join(','));
+          });
+        }
+      });
+      
+      // Create CSV content
+      const csvContent = csvRows.join('\n');
+      
+      // Send the CSV
+      res.send(csvContent);
+    } catch (error) {
+      console.error('Error in direct download endpoint:', error);
+      res.status(500).json({ error: 'Failed to generate direct download' });
+    }
+  });
+  
   // Register the router at /api/bulk-leads path
   app.use('/api/bulk-leads', router);
   
