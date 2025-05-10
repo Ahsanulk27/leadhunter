@@ -30,8 +30,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { company, industry, location, position, size, prioritizeDecisionMakers } = req.body;
       
-      // Company name is now optional - we'll use industry + location for broader searches
-      const searchQuery = company || `${industry || 'real_estate'} in ${location || 'New York'}`;
+      // Build the search query for history recording
+      const searchQuery = company || 
+                        (industry && location ? `${industry} in ${location}` : 
+                         (industry || location || 'general business search'));
 
       // Record search in history
       const searchHistoryData: InsertSearchHistory = {
@@ -41,198 +43,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       await storage.createSearchHistory(searchHistoryData);
 
-      let scrapedData;
+      // Import our search controller which coordinates all data sources
+      const { searchController } = await import('./controllers/search-controller');
       
-      // ONLY use real data from publicly available sources
-      try {
-        // Import our services for real data collection
-        const { googlePlacesService } = await import('./api/google-places-service');
-        const { googleBusinessScraper } = await import('./api/google-business-scraper');
-        const { scraperService } = await import('./api/scraper-service');
-        
-        console.log("Searching for REAL business data from public Google listings...");
-        
-        // First: Try to get data from Google Places API (businesses that publish their info publicly)
-        let realBusinesses = await googlePlacesService.searchBusinesses({
-          companyName: company,
-          industry,
-          location
-        });
-        
-        // Second: Try to find business through Google Business listings
-        if (!realBusinesses || realBusinesses.length === 0) {
-          const searchQuery = company || `${industry || ''} ${location || ''}`.trim();
-          if (searchQuery) {
-            const scrapedBusinesses = await googleBusinessScraper.searchBusinesses(searchQuery);
-            realBusinesses = scrapedBusinesses;
-          }
-        }
-        
-        // Get specific business details with REAL contact information
-        if (company) {
-          const businessInfo = await googleBusinessScraper.getBusinessContacts(company, location);
-          
-          // If we found the business, extract additional contact details from their website
-          if (businessInfo && businessInfo.website) {
-            const domain = businessInfo.website;
-            
-            console.log(`Extracting REAL contact information from business website: ${domain}`);
-            const websiteData = await scraperService.scrapeCompanyWebsite(domain);
-            
-            // Get contacts from company website
-            const websiteContacts = await googleBusinessScraper.extractContactsFromWebsite(domain);
-            
-            // Use REAL contact information from the business's website
-            if (websiteContacts && websiteContacts.length > 0) {
-              businessInfo.contacts = websiteContacts;
-            }
-            
-            // Add any emails/phones we found on the website
-            if (businessInfo.contacts && businessInfo.contacts.length && 
-                (websiteData.emails.length || websiteData.phones.length)) {
-              
-              businessInfo.contacts.forEach((contact: any, index: number) => {
-                if (!contact.email && websiteData.emails[index]) {
-                  contact.email = websiteData.emails[index];
-                }
-                if (!contact.companyPhone && websiteData.phones[index]) {
-                  contact.companyPhone = websiteData.phones[index];
-                }
-              });
-            }
-          }
-          
-          // If we found REAL business data, use it
-          if (businessInfo) {
-            scrapedData = {
-              name: businessInfo.name,
-              industry: industry || "",
-              location: location || "",
-              size: size || "",
-              address: businessInfo.address || "",
-              contacts: businessInfo.contacts || []
-            };
-            console.log("Successfully fetched REAL business contact information");
-          }
-        }
-        
-        // If no specific company was provided, try to get business listings from the search
-        if (!scrapedData && realBusinesses && realBusinesses.length > 0) {
-          // Use the first business we found
-          const topBusiness = realBusinesses[0];
-          
-          // Get detailed info for this business
-          if (topBusiness.place_id) {
-            const details = await googlePlacesService.getBusinessDetails(topBusiness.place_id);
-            
-            if (details) {
-              scrapedData = {
-                name: details.name,
-                industry: industry || "",
-                location: location || "",
-                size: size || "",
-                address: details.formatted_address || "",
-                contacts: []
-              };
-              
-              // If the business has a website, scrape it for contact info
-              if (details.website) {
-                const websiteContacts = await googleBusinessScraper.extractContactsFromWebsite(details.website);
-                if (websiteContacts && websiteContacts.length > 0) {
-                  scrapedData.contacts = websiteContacts;
-                }
-              }
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Error retrieving real business data:", error);
-      }
+      console.log("Searching for REAL business data from multiple sources...");
       
-      // We ONLY use real data - no fallbacks to simulated data
+      // Search across all real data sources
+      const scrapedData = await searchController.searchBusinessData({
+        company,
+        industry, 
+        location,
+        position,
+        size,
+        prioritizeDecisionMakers
+      });
+      
+      // We ONLY use real data - if no results found, return 404
       if (!scrapedData) {
-        // If no search criteria provided, prompt for more information
-        if (!industry && !company) {
+        if (!industry && !company && !location) {
           return res.status(404).json({ 
             error: "Missing search criteria", 
-            message: "Please provide either an industry or a company name to search for leads."
+            message: "Please provide either an industry, a company name, or a location to search for leads."
           });
-        }
-        
-        // Try additional real data sources if we have industry or location
-        if (industry || location) {
-          console.log(`Trying additional real data sources for: ${industry || ''} in ${location || ''}`);
-          
-          try {
-            // Import Yelp scraper
-            const { yelpScraper } = await import('./api/yelp-scraper');
-            
-            // Search Yelp for businesses matching the criteria
-            console.log(`Searching Yelp for: ${industry || company} in ${location || 'any location'}`);
-            const yelpBusinesses = await yelpScraper.searchBusinesses(industry || company || '', location);
-            
-            if (yelpBusinesses && yelpBusinesses.length > 0) {
-              console.log(`Found ${yelpBusinesses.length} businesses on Yelp`);
-              
-              // Get the first business for detailed info
-              const topBusiness = yelpBusinesses[0];
-              
-              // Get detailed information if possible
-              let businessDetails = null;
-              if (topBusiness.yelp_url) {
-                try {
-                  businessDetails = await yelpScraper.getBusinessDetails(topBusiness.yelp_url);
-                } catch (detailError) {
-                  console.error('Error getting Yelp business details:', detailError);
-                }
-              }
-              
-              if (businessDetails) {
-                // Use the detailed information
-                scrapedData = {
-                  name: businessDetails.name,
-                  industry: industry || '',
-                  location: location || businessDetails.address,
-                  size: size || '',
-                  address: businessDetails.address,
-                  contacts: businessDetails.contacts || []
-                };
-                
-                console.log(`Successfully retrieved real business data from Yelp`);
-              } else {
-                // Create basic data from the search result
-                scrapedData = {
-                  name: topBusiness.name,
-                  industry: industry || (topBusiness.types && topBusiness.types.length > 0 ? topBusiness.types[0].replace(/_/g, ' ') : ''),
-                  location: location || topBusiness.vicinity || '',
-                  size: size || '',
-                  address: topBusiness.formatted_address || topBusiness.vicinity || '',
-                  contacts: [{
-                    id: 1,
-                    name: `Contact at ${topBusiness.name}`,
-                    position: "Business Representative",
-                    email: null,
-                    companyPhone: topBusiness.phone || null,
-                    personalPhone: null,
-                    isDecisionMaker: false,
-                    influence: 50,
-                    notes: 'Contact information from real business listing.'
-                  }]
-                };
-                
-                console.log(`Created basic data from Yelp business listing`);
-              }
-            }
-          } catch (yelpError) {
-            console.error('Error searching Yelp:', yelpError);
-          }
-        }
-        
-        // If we still don't have any data after trying all real sources
-        if (!scrapedData) {
+        } else {
           return res.status(404).json({ 
             error: "No real business data found for this search", 
-            message: "No real business information could be found after searching multiple sources. Try searching with different criteria, such as a more specific industry or a location."
+            message: "No real business information could be found after searching Google Maps, Yelp, and Yellow Pages. Try searching with different criteria, such as a more specific company name or location."
           });
         }
       }

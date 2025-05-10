@@ -220,8 +220,9 @@ export class GooglePlacesService {
   
   /**
    * Scrape YellowPages for business listings as a last resort
+   * This is public to allow direct access from the search controller
    */
-  private async scrapeYellowPages(query: string) {
+  async scrapeYellowPages(query: string) {
     try {
       console.log('Attempting to scrape YellowPages for business data...');
       
