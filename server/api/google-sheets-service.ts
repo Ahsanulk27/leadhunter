@@ -37,10 +37,11 @@ export class GoogleSheetsService {
   /**
    * Validate the Google API key by making a simple test request
    */
-  async checkApiKeyValidity(): Promise<boolean> {
+  async checkApiKeyValidity(): Promise<{valid: boolean, message?: string}> {
     if (!this.sheets) {
-      console.log('⚠️ Google Sheets API not initialized, cannot validate API key');
-      return false;
+      const message = 'Google Sheets API not initialized, cannot validate API key';
+      console.log(`⚠️ ${message}`);
+      return { valid: false, message };
     }
     
     try {
@@ -54,10 +55,25 @@ export class GoogleSheetsService {
       });
       
       console.log('✅ Google API Key validation successful');
-      return true;
+      return { valid: true };
     } catch (error) {
-      console.warn(`⚠️ Google API Key validation failed: ${(error as Error).message}`);
-      return false;
+      const errorMessage = (error as Error).message;
+      console.warn(`⚠️ Google API Key validation failed: ${errorMessage}`);
+      
+      // Check for specific API not enabled error
+      const apiNotEnabledRegex = /API .* has not been used in project .* before or it is disabled/;
+      if (apiNotEnabledRegex.test(errorMessage)) {
+        const message = 'The Google Sheets API is not enabled for this API key. You need to enable it in the Google Cloud Console.';
+        return { valid: false, message };
+      }
+      
+      // Check for invalid key
+      if (errorMessage.includes('invalid API key')) {
+        const message = 'The provided Google API key is invalid. Please check the key and try again.';
+        return { valid: false, message };
+      }
+      
+      return { valid: false, message: errorMessage };
     }
   }
   

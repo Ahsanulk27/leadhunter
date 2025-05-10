@@ -149,13 +149,23 @@ router.get('/api/diagnostics', async (req: Request, res: Response) => {
  */
 router.get('/api/sheets-status', async (req: Request, res: Response) => {
   try {
-    const isValid = await googleSheetsService.checkApiKeyValidity();
+    const validationResult = await googleSheetsService.checkApiKeyValidity();
     
-    return res.json({
-      status: isValid ? 'valid' : 'invalid',
-      has_key: !!process.env.GOOGLE_API_KEY,
-      timestamp: new Date().toISOString()
-    });
+    if (validationResult.valid) {
+      return res.json({
+        status: 'valid',
+        has_key: !!process.env.GOOGLE_API_KEY,
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      return res.json({
+        status: 'error',
+        has_key: !!process.env.GOOGLE_API_KEY,
+        error_message: validationResult.message || 'Unknown validation error',
+        solution: 'Please make sure the Google Sheets API is enabled in your Google Cloud Console. Visit https://console.developers.google.com/apis/api/sheets.googleapis.com/overview and enable the API, then try again.',
+        timestamp: new Date().toISOString()
+      });
+    }
   } catch (error) {
     console.error('❌ Error in /sheets-status endpoint:', error);
     
