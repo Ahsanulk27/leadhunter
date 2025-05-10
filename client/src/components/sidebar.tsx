@@ -73,17 +73,7 @@ export default function Sidebar() {
             );
           })}
         </ul>
-        
-        <div className="pt-5 mt-5 border-t border-gray-200">
-          <div className="flex items-center p-2 text-base font-medium text-gray-600">
-            <div className="w-2 h-2 rounded-full bg-green-500 mr-2"></div>
-            <span>API Status: <span className="text-green-500">Active</span></span>
-          </div>
-          <div className="flex items-center p-2 text-base font-medium text-gray-600">
-            <Database className="w-6 h-6 text-gray-500" />
-            <span className="ml-3">Usage: <span className="text-gray-600">120/500</span></span>
-          </div>
-        </div>
+
       </div>
     </aside>
   );
