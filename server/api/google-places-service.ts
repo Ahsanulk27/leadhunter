@@ -35,6 +35,10 @@ export class GooglePlacesService {
   async searchBusinesses(query: string, location?: string): Promise<{
     businesses: BusinessData[];
     sources: string[];
+    error?: {
+      code: string;
+      message: string;
+    };
   }> {
     console.log(`🔍 GooglePlacesService: Searching for '${query}' in ${location || 'any location'}`);
     
@@ -62,8 +66,39 @@ export class GooglePlacesService {
       const data: PlacesSearchResult = response.data;
       
       if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-        console.error(`❌ GooglePlacesService: API error: ${data.status}`);
-        return { businesses: [], sources: [] };
+        const errorMessage = `❌ GooglePlacesService: API error: ${data.status}`;
+        console.error(errorMessage);
+        
+        // Return detailed error information
+        if (data.status === 'REQUEST_DENIED') {
+          console.error('This usually happens when the API key doesn\'t have Places API enabled or has restrictions.');
+          return { 
+            businesses: [], 
+            sources: [],
+            error: {
+              code: 'PLACES_API_REQUEST_DENIED',
+              message: 'Google Places API request was denied. Please check API key permissions.'
+            }
+          };
+        } else if (data.status === 'OVER_QUERY_LIMIT') {
+          return { 
+            businesses: [], 
+            sources: [],
+            error: {
+              code: 'PLACES_API_QUERY_LIMIT',
+              message: 'Google Places API query limit exceeded. Please try again later.'
+            }
+          };
+        } else {
+          return { 
+            businesses: [], 
+            sources: [],
+            error: {
+              code: 'PLACES_API_ERROR',
+              message: `Google Places API error: ${data.status}`
+            }
+          };
+        }
       }
       
       if (data.results.length === 0) {

@@ -33,7 +33,7 @@ export class SearchController {
   async searchBusinessData(
     params: SearchParams,
     options: SearchControllerOptions = {}
-  ): Promise<ScrapingResult> {
+  ): Promise<ScrapingResult & { error?: { code: string; message: string } }> {
     const mergedOptions = { ...this.defaultOptions, ...options };
     const executionId = uuidv4();
     const timestamp = new Date().toISOString();
@@ -86,8 +86,12 @@ export class SearchController {
       const paginatedBusinesses = businesses.slice(startIndex, endIndex);
       const totalPages = Math.ceil(businesses.length / limit);
       
+      // Check if we have an API error from the last execution attempt
+      const lastExecution = await this.executeSearch(params, executionId, retryCount);
+      const apiError = (lastExecution as any).error;
+      
       // Create result object
-      const result: ScrapingResult = {
+      const result: ScrapingResult & { error?: { code: string; message: string } } = {
         businesses: paginatedBusinesses,
         meta: {
           sources,
@@ -101,6 +105,11 @@ export class SearchController {
           total_pages: totalPages
         }
       };
+      
+      // Add error information if present
+      if (apiError) {
+        result.error = apiError;
+      }
       
       return result;
     } catch (error) {
@@ -119,6 +128,10 @@ export class SearchController {
   ): Promise<{
     businesses: BusinessData[];
     sources: string[];
+    error?: {
+      code: string;
+      message: string;
+    };
   }> {
     const query = params.query;
     const location = params.location;
@@ -126,7 +139,18 @@ export class SearchController {
     try {
       // Execute search using Google Places API
       console.log(`🔍 SearchController: Searching using Google Places API for "${query}" in ${location || 'any location'}`);
-      const { businesses, sources } = await googlePlacesService.searchBusinesses(query, location);
+      const result = await googlePlacesService.searchBusinesses(query, location);
+      const { businesses, sources } = result;
+      
+      // Check if there was an API error
+      if ((result as any).error) {
+        console.log(`❌ SearchController: API error - ${(result as any).error.code}`);
+        return { 
+          businesses: [], 
+          sources: [],
+          error: (result as any).error
+        };
+      }
       
       if (businesses.length > 0) {
         console.log(`✅ SearchController: Found ${businesses.length} businesses from Google Places API`);
