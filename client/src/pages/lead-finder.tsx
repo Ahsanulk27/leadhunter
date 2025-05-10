@@ -35,7 +35,7 @@ export default function LeadFinder() {
       
       try {
         // Note: We're using fetch directly here instead of apiRequest to handle response errors manually
-        console.log("Sending search request with data:", searchData);
+        console.log("DEBUG: Sending search request with data:", searchData);
         
         const response = await fetch('/api/search', {
           method: 'POST',
@@ -43,23 +43,34 @@ export default function LeadFinder() {
           body: JSON.stringify(searchData)
         });
         
-        console.log(`Response status: ${response.status} ${response.statusText}`);
+        console.log(`DEBUG: Response status: ${response.status} ${response.statusText}`);
         
         // Parse the response data
         const responseText = await response.text();
-        console.log("Raw response:", responseText);
+        console.log("DEBUG: Raw response:", responseText);
         
         let data;
         try {
           data = JSON.parse(responseText);
+          console.log("DEBUG: Parsed JSON data:", data);
+          
+          // Log important pieces of the data structure to debug rendering issues
+          if (data && data.company) {
+            console.log("DEBUG: Company data:", data.company);
+          }
+          
+          if (data && data.contacts) {
+            console.log("DEBUG: Contacts data:", data.contacts);
+            console.log("DEBUG: Contacts array length:", data.contacts.length);
+          }
         } catch (e) {
-          console.error("Failed to parse JSON response:", e);
+          console.error("DEBUG: Failed to parse JSON response:", e);
           throw new Error(`Invalid response from server: ${responseText}`);
         }
         
         // Check for error in the response
         if (!response.ok) {
-          console.error("Search error - status:", response.status, "data:", data);
+          console.error("DEBUG: Search error - status:", response.status, "data:", data);
           
           // Handle specific error types
           if (data && data.error) {
@@ -83,26 +94,50 @@ export default function LeadFinder() {
           }
         }
         
-        // If we've got valid data, return it
+        // Ensure data structure is as expected to prevent rendering errors
+        if (!data || typeof data !== 'object') {
+          console.error("DEBUG: Data is not a valid object:", data);
+          throw new Error("Invalid data format received from server");
+        }
+        
+        if (!data.company || typeof data.company !== 'object') {
+          console.error("DEBUG: Missing or invalid company data:", data);
+          throw new Error("Missing company information in search results");
+        }
+        
+        // Ensure contacts exists and is an array, even if empty
+        if (!data.contacts || !Array.isArray(data.contacts)) {
+          console.log("DEBUG: Creating empty contacts array for data:", data);
+          data.contacts = [];
+        }
+        
+        // Verify other required fields for rendering
+        console.log("DEBUG: Data ready for return:", data);
         return data;
       } catch (error) {
-        console.error("Search request failed:", error);
+        console.error("DEBUG: Search request failed:", error);
         throw error;
       } finally {
         setIsLoading(false);
       }
     },
     onSuccess: (data) => {
-      console.log("Search successful, got data:", data);
+      console.log("DEBUG: Search successful, got data:", data);
+      // Explicitly log the structure needed for rendering
+      console.log("DEBUG: Company data for rendering:", data.company);
+      console.log("DEBUG: Contacts data for rendering:", data.contacts);
+      
+      // Make sure search results is properly set
       setSearchResults(data);
       setSearchError(null);
+      
       // Invalidate saved leads query in case we've updated them
       queryClient.invalidateQueries({ queryKey: ['/api/saved-leads'] });
       // Invalidate search history
       queryClient.invalidateQueries({ queryKey: ['/api/search-history'] });
     },
     onError: (error) => {
-      console.error("Search mutation error:", error);
+      console.error("DEBUG: Search mutation error:", error);
       setSearchResults(null);
       const errorMessage = error instanceof Error ? error.message : "Failed to search for leads";
       setSearchError(errorMessage);
@@ -216,14 +251,20 @@ export default function LeadFinder() {
               </div>
             </div>
           </div>
-        ) : !isLoading && searchResults && (
-          <SearchResults 
-            results={searchResults} 
-            isLoading={false}
-            onSaveLead={handleSaveLead}
-            onExport={handleExport}
-          />
-        )}
+        ) : !isLoading && searchResults ? (
+          // Log the data before attempting to render it
+          (() => {
+            console.log("DEBUG: About to render search results with data:", searchResults);
+            return (
+              <SearchResults 
+                results={searchResults} 
+                isLoading={false}
+                onSaveLead={handleSaveLead}
+                onExport={handleExport}
+              />
+            );
+          })()
+        ) : null}
         
         {savedLeads && Array.isArray(savedLeads) && savedLeads.length > 0 && (
           <SavedLeads leads={savedLeads} isLoading={savedLeadsLoading} />

@@ -36,12 +36,24 @@ export default function SearchResults({ results, isLoading, onSaveLead, onExport
   
   const itemsPerPage = 5;
   
-  const { company, contacts = [] } = results || {};
+  // Debugging: log the entire results object
+  console.log("DEBUG SearchResults component - received results:", results);
+  
+  // Safely extract data with fallbacks to prevent rendering errors
+  const company = results?.company || {};
+  const rawContacts = results?.contacts || [];
+  console.log("DEBUG SearchResults component - extracted company:", company);
+  console.log("DEBUG SearchResults component - extracted contacts:", rawContacts);
+  
+  // Ensure contacts is always an array
+  const contacts = Array.isArray(rawContacts) ? rawContacts : [];
   
   // Filter contacts based on decision maker status if the filter is active
   const filteredContacts = filterDecisionMakers 
     ? contacts.filter((contact: any) => contact.isDecisionMaker) 
     : contacts;
+  
+  console.log("DEBUG SearchResults component - filtered contacts:", filteredContacts);
   
   // Sort the contacts
   const sortedContacts = [...filteredContacts].sort((a: any, b: any) => {
@@ -54,6 +66,8 @@ export default function SearchResults({ results, isLoading, onSaveLead, onExport
     if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
     return 0;
   });
+  
+  console.log("DEBUG SearchResults component - sorted contacts:", sortedContacts);
   
   // Paginate the results
   const totalPages = Math.ceil(sortedContacts.length / itemsPerPage);
@@ -175,7 +189,7 @@ export default function SearchResults({ results, isLoading, onSaveLead, onExport
                       </div>
                       <div className="flex items-center text-gray-500">
                         <Phone className="w-5 text-center mr-2 h-4" />
-                        <span>{contact.companyPhone || contact.personalPhone || "No phone available"}</span>
+                        <span>{contact.phoneNumber || contact.companyPhone || contact.personalPhone || "No phone available"}</span>
                       </div>
                       {contact.personalPhone && contact.companyPhone && (
                         <div className="flex items-center text-gray-500 ml-7">
