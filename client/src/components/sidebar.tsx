@@ -8,7 +8,9 @@ import {
   Settings, 
   Database,
   Globe,
-  Users
+  Users,
+  UserRound,
+  FileSpreadsheet
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -30,6 +32,11 @@ export default function Sidebar() {
       title: "B2C Leads",
       href: "/b2c-leads",
       icon: <Users className="w-6 h-6" />,
+    },
+    {
+      title: "Consumer Bulk Leads",
+      href: "/consumer-bulk-leads",
+      icon: <UserRound className="w-6 h-6" />,
     },
     {
       title: "My Leads",
