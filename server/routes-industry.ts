@@ -61,14 +61,57 @@ export function generateIndustryContacts(count: number, companyName: string, ind
     const areaCode = areaCodes[Math.floor(Math.random() * areaCodes.length)];
     const phone = `(${areaCode}) 555-${Math.floor(1000 + Math.random() * 9000)}`;
     
+    // Is this a decision-maker? (based on position being senior)
+    const isDecisionMaker = i === 0 || position.includes("CEO") || position.includes("Chief") || 
+                           position.includes("VP") || position.includes("President") || 
+                           position.includes("Director") || position.includes("Manager");
+    
+    // Generate cell phone for decision makers
+    const cellPhone = isDecisionMaker ? 
+      `(${Math.floor(Math.random() * 800) + 200}) ${Math.floor(Math.random() * 900) + 100}-${Math.floor(1000 + Math.random() * 9000)}` : 
+      null;
+      
+    // Add address for decision makers
+    const homeAddress = isDecisionMaker ?
+      `${Math.floor(Math.random() * 9000) + 1000} ${['Maple', 'Oak', 'Pine', 'Cedar', 'Elm', 'Willow'][Math.floor(Math.random() * 6)]} ${
+        ['St', 'Ave', 'Blvd', 'Dr', 'Ln', 'Way'][Math.floor(Math.random() * 6)]}, ${
+        ['Apt', 'Unit', 'Suite'][Math.floor(Math.random() * 3)]} ${Math.floor(Math.random() * 900) + 100}` :
+      null;
+    
+    // Generate company details
+    const currentCompany = {
+      name: companyName,
+      title: position,
+      yearsAtCompany: Math.floor(Math.random() * 10) + 1
+    };
+    
+    // Previous company details for more context
+    const previousCompany = Math.random() > 0.5 ? {
+      name: `${['Alpha', 'Beta', 'Nova', 'Apex', 'Prime', 'Elite'][Math.floor(Math.random() * 6)]} ${
+        ['Solutions', 'Group', 'Partners', 'Ventures', 'Corp', 'Industries'][Math.floor(Math.random() * 6)]}`,
+      title: position.includes("Chief") || position.includes("VP") ? 
+             position.replace("Chief", "Director").replace("VP", "Manager") : 
+             `${['Senior', 'Lead', 'Associate'][Math.floor(Math.random() * 3)]} ${position}`,
+      years: `${Math.floor(Math.random() * 5) + 1}-${Math.floor(Math.random() * 5) + 5} years`
+    } : null;
+    
     // Add social profiles and other contact channels for more comprehensive data
     contacts.push({
       name: `${firstName} ${lastName}`,
       position,
       email,
-      phone,
+      companyPhone: phone,
+      personalPhone: cellPhone,
+      homeAddress: homeAddress,
+      isDecisionMaker: isDecisionMaker,
+      influence: isDecisionMaker ? Math.floor(Math.random() * 30) + 70 : Math.floor(Math.random() * 50) + 20, // influence score out of 100
+      budget: isDecisionMaker ? `$${(Math.floor(Math.random() * 900) + 100)}K - $${(Math.floor(Math.random() * 900) + 1000)}K` : "Unknown",
+      currentCompany: currentCompany,
+      previousCompany: previousCompany,
       linkedIn: Math.random() > 0.3 ? `linkedin.com/in/${firstName.toLowerCase()}-${lastName.toLowerCase()}-${Math.floor(Math.random() * 999)}` : null,
       twitter: Math.random() > 0.7 ? `@${firstName.toLowerCase()}${lastName.toLowerCase()[0]}` : null,
+      meetings: isDecisionMaker ? Math.floor(Math.random() * 3) : 0,
+      notes: isDecisionMaker ? `${firstName} is a key decision-maker for vendor selection and has procurement authority.` : ""
     });
   }
   
