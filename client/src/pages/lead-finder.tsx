@@ -38,17 +38,21 @@ export default function LeadFinder() {
         
         // Check if the response contains an error
         if (!response.ok || (data && data.error)) {
+          console.error("Search API error:", data.error);
+          
           // Handle specific API errors
           if (data.error && data.error.code === 'PLACES_API_REQUEST_DENIED') {
             throw new Error(
-              "Google Places API access is currently unavailable. Please try again later or contact support for assistance."
+              "Google Places API access is currently unavailable. Please enable the Places API for your Google API key."
             );
           } else if (data.error && data.error.code === 'PLACES_API_QUERY_LIMIT') {
             throw new Error(
               "We've reached our daily search limit. Please try again tomorrow."
             );
+          } else if (data.error && data.error.code === 'PLACES_API_ERROR') {
+            throw new Error(data.error.message || "Google Places API error encountered");
           } else {
-            const errorMessage = data.message || data.error?.message || "Failed to search for leads";
+            const errorMessage = data.message || (data.error && data.error.message) || "Failed to search for leads";
             throw new Error(errorMessage);
           }
         }
@@ -156,7 +160,13 @@ export default function LeadFinder() {
                         The application can only show real business data from Google Places API, and this service is temporarily unavailable.
                       </p>
                       <p className="mt-2">
-                        <strong>What you can do:</strong> Please try again later when our API access has been restored.
+                        <strong>Technical Details:</strong> {searchError.includes("enable") ? 
+                          "The Google Places API needs to be enabled for the API key being used." : 
+                          "There's an issue with the Google Places API configuration."}
+                      </p>
+                      <p className="mt-2">
+                        <strong>What you can do:</strong> This is a server configuration issue that requires administrator attention.
+                        Please try again later once the API access has been properly configured.
                       </p>
                     </div>
                   ) : (
