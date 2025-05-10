@@ -6,6 +6,7 @@
 import { googleMapsScraper } from '../api/google-maps-scraper';
 import { yelpScraper } from '../api/yelp-scraper';
 import { googlePlacesService } from '../api/google-places-service';
+import { industryScraper } from '../api/industry-scraper';
 
 export interface SearchParams {
   company?: string;
@@ -31,40 +32,62 @@ export class SearchController {
    * This will try multiple real sources in sequence
    */
   async searchBusinessData(params: SearchParams): Promise<BusinessData | null> {
+    console.log(`📍 SearchController: Processing search request with params:`, params);
+    
     // Build the search query for scrapers
     const searchQuery = params.company || 
                      (params.industry && params.location ? `${params.industry} in ${params.location}` : 
                       (params.industry || params.location || ''));
     
     if (!searchQuery) {
-      console.log("No search query provided");
+      console.log("📍 SearchController: No search query provided");
       return null;
     }
     
     // Track all our discovered businesses across sources
     let realBusinesses: any[] = [];
     
-    // 1. First try Google Maps with puppeteer - required by specs
-    console.log(`Searching Google Maps for: ${searchQuery}`);
-    try {
-      const googleMapsResults = await googleMapsScraper.searchBusinesses(searchQuery);
-      
-      if (googleMapsResults && googleMapsResults.length > 0) {
-        console.log(`Found ${googleMapsResults.length} businesses on Google Maps`);
-        realBusinesses = [...googleMapsResults];
+    // If we have a specific industry, try that first through industry directory
+    if (params.industry && !params.company) {
+      console.log(`📍 SearchController: Searching industry directory for: ${params.industry}`);
+      try {
+        const industryResults = await industryScraper.searchIndustryDirectory(
+          params.industry, 
+          params.location
+        );
+        
+        if (industryResults && industryResults.length > 0) {
+          console.log(`📍 SearchController: Found ${industryResults.length} businesses in industry directories`);
+          realBusinesses = [...industryResults];
+        }
+      } catch (industryError) {
+        console.error("Error with industry directory search:", industryError);
       }
-    } catch (googleMapsError) {
-      console.error("Error with Google Maps search:", googleMapsError);
     }
     
-    // 2. Try Yelp if Google Maps didn't work
+    // 1. Try Google Maps with puppeteer if we don't have results yet
     if (realBusinesses.length === 0) {
-      console.log(`Searching Yelp for: ${searchQuery}`);
+      console.log(`📍 SearchController: Searching Google Maps for: ${searchQuery}`);
+      try {
+        const googleMapsResults = await googleMapsScraper.searchBusinesses(searchQuery);
+        
+        if (googleMapsResults && googleMapsResults.length > 0) {
+          console.log(`📍 SearchController: Found ${googleMapsResults.length} businesses on Google Maps`);
+          realBusinesses = [...googleMapsResults];
+        }
+      } catch (googleMapsError) {
+        console.error("Error with Google Maps search:", googleMapsError);
+      }
+    }
+    
+    // 2. Try Yelp if we still don't have results
+    if (realBusinesses.length === 0) {
+      console.log(`📍 SearchController: Searching Yelp for: ${searchQuery}`);
       try {
         const yelpResults = await yelpScraper.searchBusinesses(searchQuery, params.location);
         
         if (yelpResults && yelpResults.length > 0) {
-          console.log(`Found ${yelpResults.length} businesses on Yelp`);
+          console.log(`📍 SearchController: Found ${yelpResults.length} businesses on Yelp`);
           realBusinesses = [...yelpResults];
         }
       } catch (yelpError) {
@@ -74,12 +97,12 @@ export class SearchController {
     
     // 3. Try Yellow Pages as a last resort
     if (realBusinesses.length === 0) {
-      console.log(`Searching Yellow Pages for: ${searchQuery}`);
+      console.log(`📍 SearchController: Searching Yellow Pages for: ${searchQuery}`);
       try {
         const yellowPagesResults = await googlePlacesService.scrapeYellowPages(searchQuery);
         
         if (yellowPagesResults && yellowPagesResults.length > 0) {
-          console.log(`Found ${yellowPagesResults.length} businesses on Yellow Pages`);
+          console.log(`📍 SearchController: Found ${yellowPagesResults.length} businesses on Yellow Pages`);
           realBusinesses = [...yellowPagesResults];
         }
       } catch (yellowPagesError) {
@@ -94,14 +117,29 @@ export class SearchController {
       // Business data with detailed info from scrapers
       let businessDetails = null;
       
+      console.log(`📍 SearchController: Getting details for business: ${topBusiness.name}`);
+      
       // Try to get more details based on where we found the business
-      if (topBusiness.place_id?.startsWith('gm-') || params.company) {
+      if (topBusiness.place_id?.startsWith('dir-')) {
+        // If from industry directory
+        try {
+          businessDetails = await industryScraper.getBusinessDetails(
+            params.company || topBusiness.name,
+            params.industry,
+            params.location
+          );
+          console.log(`📍 SearchController: Got industry directory details for ${topBusiness.name}`);
+        } catch (industryDetailError) {
+          console.error("Error getting industry business details:", industryDetailError);
+        }
+      } else if (topBusiness.place_id?.startsWith('gm-') || params.company) {
         // If from Google Maps or if we have a company name
         try {
           businessDetails = await googleMapsScraper.getBusinessDetails(
             params.company || topBusiness.name, 
             params.location
           );
+          console.log(`📍 SearchController: Got Google Maps details for ${topBusiness.name}`);
         } catch (mapsDetailError) {
           console.error("Error getting Google Maps business details:", mapsDetailError);
         }
@@ -109,6 +147,7 @@ export class SearchController {
         // If from Yelp
         try {
           businessDetails = await yelpScraper.getBusinessDetails(topBusiness.yelp_url);
+          console.log(`📍 SearchController: Got Yelp details for ${topBusiness.name}`);
         } catch (yelpDetailError) {
           console.error("Error getting Yelp business details:", yelpDetailError);
         }

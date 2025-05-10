@@ -1,21 +1,19 @@
 /**
- * Utilities for web scraping with anti-ban protections
- * These help with rotating user agents and adding delays
+ * Utility functions to support web scraping operations
  */
 
-// Collection of realistic user agents to rotate through
+// Common user agents to rotate through to avoid detection
 const USER_AGENTS = [
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0',
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 OPR/108.0.0.0',
-  'Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko',
-  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-  'Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-  'Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.4 Safari/605.1.15',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36 Edg/116.0.1938.69',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/117.0.5938.108 Mobile/15E148 Safari/604.1',
+  'Mozilla/5.0 (iPad; CPU OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+  'Mozilla/5.0 (Linux; Android 13; SM-S901U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36',
+  'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36'
 ];
 
 /**
@@ -23,7 +21,8 @@ const USER_AGENTS = [
  * This helps prevent blocking by rotating identities
  */
 export function getRandomUserAgent(): string {
-  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+  const randomIndex = Math.floor(Math.random() * USER_AGENTS.length);
+  return USER_AGENTS[randomIndex];
 }
 
 /**
@@ -33,7 +32,7 @@ export function getRandomUserAgent(): string {
  * @param max Maximum delay in milliseconds
  */
 export function getRandomDelay(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1) + min);
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 /**
@@ -43,7 +42,7 @@ export function getRandomDelay(min: number, max: number): number {
  */
 export function addJitter(baseDelay: number, jitterPercent: number = 0.2): number {
   const jitterAmount = baseDelay * jitterPercent;
-  return baseDelay + (Math.random() * jitterAmount * 2 - jitterAmount);
+  return baseDelay + getRandomDelay(-jitterAmount, jitterAmount);
 }
 
 /**
@@ -52,27 +51,29 @@ export function addJitter(baseDelay: number, jitterPercent: number = 0.2): numbe
  * @param sourceName Name of the source being scraped (for logging)
  */
 export function handleScrapingError(error: any, sourceName: string): void {
-  // Check for common blocking/CAPTCHA patterns
-  const errorText = error.toString().toLowerCase();
+  console.error(`Error scraping ${sourceName}:`, error.message || error);
   
-  if (errorText.includes('captcha') || 
-      errorText.includes('403') || 
-      errorText.includes('forbidden') ||
-      errorText.includes('access denied') ||
-      errorText.includes('blocked')) {
-    
-    console.error(`BLOCKED/CAPTCHA detected from ${sourceName}: ${error}`);
-    // Log detailed info for debugging
-    if (error.response) {
-      console.error(`Status: ${error.response.status}`);
-      console.error(`Headers: ${JSON.stringify(error.response.headers)}`);
-    }
-  } else if (errorText.includes('timeout') || 
-            errorText.includes('socket hang up') ||
-            errorText.includes('econnreset')) {
-    console.error(`Connection issue with ${sourceName}: ${error}`);
-  } else {
-    console.error(`Error scraping ${sourceName}: ${error}`);
+  // Check for common error types to provide better logging
+  if (error.message && (
+    error.message.includes('captcha') || 
+    error.message.includes('CAPTCHA') ||
+    error.message.includes('robot') ||
+    error.message.includes('verify') ||
+    error.message.includes('unusual activity') ||
+    error.message.includes('blocked')
+  )) {
+    console.error(`⚠️ Detected possible CAPTCHA or blocking on ${sourceName}`);
+  } else if (error.message && (
+    error.message.includes('timeout') ||
+    error.message.includes('Timeout') ||
+    error.message.includes('timed out')
+  )) {
+    console.error(`⚠️ Request timed out when scraping ${sourceName}`);
+  } else if (error.message && (
+    error.message.includes('429') ||
+    error.message.includes('too many requests')
+  )) {
+    console.error(`⚠️ Rate limited by ${sourceName}`);
   }
 }
 
@@ -82,29 +83,32 @@ export function handleScrapingError(error: any, sourceName: string): void {
  * @param text Text to extract emails from
  */
 export function extractBusinessEmails(text: string): string[] {
-  // Basic email regex
-  const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/gi;
-  const matches = text.match(emailRegex) || [];
+  const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
+  const emails = text.match(emailRegex) || [];
   
-  // Business emails are more likely to have these patterns
-  const businessEmails = matches.filter(email => {
-    const prefix = email.split('@')[0].toLowerCase();
-    return prefix.includes('info') ||
-           prefix.includes('contact') ||
-           prefix.includes('sales') ||
-           prefix.includes('support') ||
-           prefix.includes('hello') ||
-           prefix.includes('admin') ||
-           prefix.includes('office') ||
-           prefix.includes('service') ||
-           prefix.includes('business') ||
-           prefix.includes('inquir') ||
-           prefix.includes('help');
+  // Filter out likely personal emails
+  const businessEmails = emails.filter(email => {
+    const lowercasedEmail = email.toLowerCase();
+    // Exclude common personal email domains
+    if (lowercasedEmail.endsWith('@gmail.com') || 
+        lowercasedEmail.endsWith('@hotmail.com') || 
+        lowercasedEmail.endsWith('@yahoo.com') ||
+        lowercasedEmail.endsWith('@aol.com') ||
+        lowercasedEmail.endsWith('@outlook.com')) {
+      return false;
+    }
+    
+    // Exclude likely personal email usernames
+    const username = lowercasedEmail.split('@')[0];
+    if (username.length < 3) {
+      return false;
+    }
+    
+    return true;
   });
   
-  // Remove duplicates
-  const uniqueSet = new Set<string>(businessEmails);
-  return Array.from(uniqueSet);
+  // Return unique emails
+  return [...new Set(businessEmails)];
 }
 
 /**
@@ -112,13 +116,32 @@ export function extractBusinessEmails(text: string): string[] {
  * @param text Text to extract phone numbers from
  */
 export function extractPhoneNumbers(text: string): string[] {
-  // This regex covers most common US phone formats
-  const phoneRegex = /(?:\+?1[-\s.]?)?\(?([0-9]{3})\)?[-\s.]?([0-9]{3})[-\s.]?([0-9]{4})/g;
-  const matches = text.match(phoneRegex) || [];
+  // Different phone number formats
+  const phonePatterns = [
+    // (123) 456-7890
+    /\((\d{3})\)\s*(\d{3})[-. ]?(\d{4})/g,
+    // 123-456-7890
+    /(\d{3})[-. ](\d{3})[-. ](\d{4})/g,
+    // 123.456.7890
+    /(\d{3})[.](\d{3})[.](\d{4})/g,
+    // 1234567890 (10 digits straight)
+    /(?<!\d)(\d{10})(?!\d)/g,
+    // +1 123 456 7890 (international format)
+    /\+\d{1,3}[-. ]?(\d{3})[-. ]?(\d{3})[-. ]?(\d{4})/g
+  ];
   
-  // Remove duplicates
-  const uniqueSet = new Set<string>(matches);
-  return Array.from(uniqueSet);
+  const phoneNumbers: string[] = [];
+  
+  // Extract phone numbers using different patterns
+  for (const pattern of phonePatterns) {
+    const matches = text.matchAll(pattern);
+    for (const match of matches) {
+      phoneNumbers.push(match[0]);
+    }
+  }
+  
+  // Return unique phone numbers
+  return [...new Set(phoneNumbers)];
 }
 
 /**
@@ -126,19 +149,40 @@ export function extractPhoneNumbers(text: string): string[] {
  * @param title Job title to check
  */
 export function isDecisionMakerTitle(title: string = ""): boolean {
-  const titleLower = title.toLowerCase();
-  return titleLower.includes('ceo') ||
-         titleLower.includes('cto') ||
-         titleLower.includes('cfo') ||
-         titleLower.includes('coo') ||
-         titleLower.includes('chief') ||
-         titleLower.includes('president') ||
-         titleLower.includes('vp') ||
-         titleLower.includes('vice president') ||
-         titleLower.includes('director') ||
-         titleLower.includes('head of') ||
-         titleLower.includes('founder') ||
-         titleLower.includes('owner') ||
-         titleLower.includes('partner') ||
-         titleLower.includes('principal');
+  const lowerTitle = title.toLowerCase();
+  
+  // C-level executives
+  if (
+    lowerTitle.includes("ceo") ||
+    lowerTitle.includes("cto") ||
+    lowerTitle.includes("cfo") ||
+    lowerTitle.includes("coo") ||
+    lowerTitle.includes("chief") ||
+    lowerTitle.includes("president") ||
+    lowerTitle.includes("founder") ||
+    lowerTitle.includes("owner")
+  ) {
+    return true;
+  }
+  
+  // Directors and VPs
+  if (
+    lowerTitle.includes("director") ||
+    lowerTitle.includes("vice president") ||
+    lowerTitle.includes("vp ") ||
+    lowerTitle.includes("head of")
+  ) {
+    return true;
+  }
+  
+  // Managers
+  if (
+    lowerTitle.includes("manager") ||
+    lowerTitle.includes("supervisor") ||
+    lowerTitle.includes("lead")
+  ) {
+    return true;
+  }
+  
+  return false;
 }
