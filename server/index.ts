@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import path from "path";
 import fs from "fs";
+import { runStartupOperations, schedulePeriodicHealthChecks } from "./startup";
 
 const app = express();
 app.use(express.json());
@@ -102,5 +103,17 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+    
+    // Run startup operations after server is started
+    runStartupOperations()
+      .then(() => {
+        log('Startup operations completed successfully');
+        
+        // Schedule periodic health checks
+        schedulePeriodicHealthChecks();
+      })
+      .catch(err => {
+        console.error('Error during startup operations:', err);
+      });
   });
 })();
