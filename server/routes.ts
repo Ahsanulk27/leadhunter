@@ -72,25 +72,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
         apiQuery = "business";
       }
       
-      // Use our real data fetch function
-      const scrapedData = await fetchRealBusinessData(apiQuery, location);
-      
-      console.log("📍 Search completed, results:", scrapedData ? "Data found" : "No data found");
-      
-      // We ONLY use real data - if no results found, return 404
-      if (!scrapedData) {
-        console.log("📍 No real data found, returning 404");
-        if (!industry && !company && !location) {
-          return res.status(404).json({ 
-            error: "Missing search criteria", 
-            message: "Please provide either an industry, a company name, or a location to search for leads."
-          });
-        } else {
-          return res.status(404).json({ 
-            error: "No real business data found for this search", 
-            message: "No real business information could be found after searching Google Maps, Yelp, and Yellow Pages. Try searching with different criteria, such as a more specific company name or location."
-          });
+      try {
+        // Use our real data fetch function
+        const scrapedData = await fetchRealBusinessData(apiQuery, location);
+        
+        console.log("📍 Search completed, results:", scrapedData ? "Data found" : "No data found");
+        
+        // We ONLY use real data - if no results found, return 404
+        if (!scrapedData) {
+          console.log("📍 No real data found, returning 404");
+          if (!industry && !company && !location) {
+            return res.status(404).json({ 
+              error: "Missing search criteria", 
+              message: "Please provide either an industry, a company name, or a location to search for leads."
+            });
+          } else {
+            return res.status(404).json({ 
+              error: "No real business data found for this search", 
+              message: "No real business information could be found after searching Google Maps, Yelp, and Yellow Pages. Try searching with different criteria, such as a more specific company name or location."
+            });
+          }
         }
+      } catch (apiError: any) {
+        console.error("📍 API error encountered:", apiError.message);
+        
+        // Check if this is a Google Places API error
+        if (apiError.message.includes("Google Places API")) {
+          if (apiError.message.includes("REQUEST_DENIED")) {
+            return res.status(503).json({
+              error: {
+                code: "PLACES_API_REQUEST_DENIED",
+                message: "Google Places API access is currently unavailable. Please enable the Places API for your Google API key."
+              }
+            });
+          } else if (apiError.message.includes("OVER_QUERY_LIMIT")) {
+            return res.status(429).json({
+              error: {
+                code: "PLACES_API_QUERY_LIMIT",
+                message: "We've reached our daily search limit with Google Places API. Please try again tomorrow."
+              }
+            });
+          } else {
+            return res.status(503).json({
+              error: {
+                code: "PLACES_API_ERROR",
+                message: apiError.message
+              }
+            });
+          }
+        }
+        
+        // For other errors, return a generic error
+        return res.status(500).json({
+          error: {
+            code: "SEARCH_ERROR",
+            message: "An error occurred while searching for business data."
+          }
+        });
       }
       
       console.log("📍 Real data found, continuing with processing...");
@@ -829,6 +867,12 @@ async function fetchRealBusinessData(query: string, location?: string): Promise<
   
   // Search for businesses using Google Places API
   const result = await googlePlacesService.searchBusinesses(query, location);
+  
+  // Check if there was an API error
+  if (result.error) {
+    console.log(`API error encountered: ${result.error.code} - ${result.error.message}`);
+    throw new Error(`Google Places API error: ${result.error.message}`);
+  }
   
   if (result.businesses.length === 0) {
     console.log(`No real business data found for query: ${query}, location: ${location}`);
