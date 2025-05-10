@@ -72,9 +72,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         apiQuery = "business";
       }
       
+      let scrapedData;
       try {
         // Use our real data fetch function
-        const scrapedData = await fetchRealBusinessData(apiQuery, location);
+        scrapedData = await fetchRealBusinessData(apiQuery, location);
         
         console.log("📍 Search completed, results:", scrapedData ? "Data found" : "No data found");
         
@@ -127,6 +128,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           error: {
             code: "SEARCH_ERROR",
             message: "An error occurred while searching for business data."
+          }
+        });
+      }
+      
+      if (!scrapedData) {
+        return res.status(500).json({
+          error: {
+            code: "DATA_PROCESSING_ERROR",
+            message: "An error occurred while processing search results."
           }
         });
       }
