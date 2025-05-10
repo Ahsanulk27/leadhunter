@@ -11,6 +11,7 @@ import {
   type Contact
 } from "@shared/schema";
 import { z } from "zod";
+import { registerB2CRoutes } from "./routes/b2c-routes";
 
 // Helper function to calculate data quality score based on completeness of business data
 function calculateDataQualityScore(businesses: BusinessData[]): number {
@@ -898,6 +899,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+
+  // Register B2C lead scraping routes
+  await registerB2CRoutes(app);
+  console.log("✅ All routes registered successfully");
 
   const httpServer = createServer(app);
   return httpServer;

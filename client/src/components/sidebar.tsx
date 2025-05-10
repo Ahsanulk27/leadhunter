@@ -7,7 +7,8 @@ import {
   BarChart, 
   Settings, 
   Database,
-  Globe
+  Globe,
+  Users
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -24,6 +25,11 @@ export default function Sidebar() {
       title: "Bulk Leads",
       href: "/bulk-leads",
       icon: <Globe className="w-6 h-6" />,
+    },
+    {
+      title: "B2C Leads",
+      href: "/b2c-leads",
+      icon: <Users className="w-6 h-6" />,
     },
     {
       title: "My Leads",
