@@ -43,71 +43,118 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let scrapedData;
       
-      // Try to use real data services first
+      // ONLY use real data from publicly available sources
       try {
-        // Import our real data services
-        const { businessDataService } = await import('./api/business-data-service');
+        // Import our services for real data collection
+        const { googlePlacesService } = await import('./api/google-places-service');
+        const { googleBusinessScraper } = await import('./api/google-business-scraper');
         const { scraperService } = await import('./api/scraper-service');
         
-        console.log("Attempting to fetch real business data...");
+        console.log("Searching for REAL business data from public Google listings...");
         
-        // Get business data from our service
-        const businessData = await businessDataService.fetchBusinessData({
+        // First: Try to get data from Google Places API (businesses that publish their info publicly)
+        let realBusinesses = await googlePlacesService.searchBusinesses({
           companyName: company,
           industry,
-          location,
-          position,
-          size,
-          prioritizeDecisionMakers
+          location
         });
         
-        // If we have a company name or domain, enhance with web scraping
-        if (company) {
-          const domain = company.includes('.') ? company : 
-            company.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com';
-            
-          console.log(`Attempting to scrape website: ${domain}`);
-          const websiteData = await scraperService.scrapeCompanyWebsite(domain);
-          
-          // Add emails/phones to contacts if available
-          if (businessData.contacts && businessData.contacts.length && 
-              (websiteData.emails.length || websiteData.phones.length)) {
-            
-            businessData.contacts.forEach((contact: any, index: number) => {
-              if (!contact.email && websiteData.emails[index]) {
-                contact.email = websiteData.emails[index];
-              }
-              if (!contact.companyPhone && websiteData.phones[index]) {
-                contact.companyPhone = websiteData.phones[index];
-              }
-            });
+        // Second: Try to find business through Google Business listings
+        if (!realBusinesses || realBusinesses.length === 0) {
+          const searchQuery = company || `${industry || ''} ${location || ''}`.trim();
+          if (searchQuery) {
+            const scrapedBusinesses = await googleBusinessScraper.searchBusinesses(searchQuery);
+            realBusinesses = scrapedBusinesses;
           }
         }
         
-        // If we successfully got real data, use it
-        if (businessData && businessData.company && businessData.contacts) {
-          scrapedData = {
-            name: businessData.company.name,
-            industry: businessData.company.industry,
-            location: businessData.company.location,
-            size: businessData.company.size,
-            address: businessData.company.address,
-            contacts: businessData.contacts
-          };
-          console.log("Successfully fetched real business data");
+        // Get specific business details with REAL contact information
+        if (company) {
+          const businessInfo = await googleBusinessScraper.getBusinessContacts(company, location);
+          
+          // If we found the business, extract additional contact details from their website
+          if (businessInfo && businessInfo.website) {
+            const domain = businessInfo.website;
+            
+            console.log(`Extracting REAL contact information from business website: ${domain}`);
+            const websiteData = await scraperService.scrapeCompanyWebsite(domain);
+            
+            // Get contacts from company website
+            const websiteContacts = await googleBusinessScraper.extractContactsFromWebsite(domain);
+            
+            // Use REAL contact information from the business's website
+            if (websiteContacts && websiteContacts.length > 0) {
+              businessInfo.contacts = websiteContacts;
+            }
+            
+            // Add any emails/phones we found on the website
+            if (businessInfo.contacts && businessInfo.contacts.length && 
+                (websiteData.emails.length || websiteData.phones.length)) {
+              
+              businessInfo.contacts.forEach((contact: any, index: number) => {
+                if (!contact.email && websiteData.emails[index]) {
+                  contact.email = websiteData.emails[index];
+                }
+                if (!contact.companyPhone && websiteData.phones[index]) {
+                  contact.companyPhone = websiteData.phones[index];
+                }
+              });
+            }
+          }
+          
+          // If we found REAL business data, use it
+          if (businessInfo) {
+            scrapedData = {
+              name: businessInfo.name,
+              industry: industry || "",
+              location: location || "",
+              size: size || "",
+              address: businessInfo.address || "",
+              contacts: businessInfo.contacts || []
+            };
+            console.log("Successfully fetched REAL business contact information");
+          }
+        }
+        
+        // If no specific company was provided, try to get business listings from the search
+        if (!scrapedData && realBusinesses && realBusinesses.length > 0) {
+          // Use the first business we found
+          const topBusiness = realBusinesses[0];
+          
+          // Get detailed info for this business
+          if (topBusiness.place_id) {
+            const details = await googlePlacesService.getBusinessDetails(topBusiness.place_id);
+            
+            if (details) {
+              scrapedData = {
+                name: details.name,
+                industry: industry || "",
+                location: location || "",
+                size: size || "",
+                address: details.formatted_address || "",
+                contacts: []
+              };
+              
+              // If the business has a website, scrape it for contact info
+              if (details.website) {
+                const websiteContacts = await googleBusinessScraper.extractContactsFromWebsite(details.website);
+                if (websiteContacts && websiteContacts.length > 0) {
+                  scrapedData.contacts = websiteContacts;
+                }
+              }
+            }
+          }
         }
       } catch (error) {
-        console.error("Error using real data services:", error);
-        console.log("Falling back to simulated data...");
+        console.error("Error retrieving real business data:", error);
       }
       
-      // If we couldn't get real data, fall back to simulated data
+      // We ONLY use real data - no fallbacks to simulated data
       if (!scrapedData) {
-        scrapedData = await simulateScraping(company || '', industry, location);
-      }
-      
-      if (!scrapedData) {
-        return res.status(404).json({ error: "No results found for this search" });
+        return res.status(404).json({ 
+          error: "No real business data found for this search", 
+          message: "We only provide 100% real information. Try searching for a specific company name that has publicly available contact information."
+        });
       }
 
       // Store company information
