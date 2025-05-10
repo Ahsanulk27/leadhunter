@@ -1,0 +1,123 @@
+{
+  "error": {
+    "error": "No real business data found after live attempts.",
+    "details": "All scraping attempts failed to return any business data.",
+    "executionId": "test-1746868577929-02ca5be2-property-management-in-los-angeles",
+    "executionDate": "2025-05-10T09:16:18.024Z"
+  },
+  "executionLog": {
+    "execution_id": "test-1746868577929-02ca5be2-property-management-in-los-angeles",
+    "timestamp": "2025-05-10T09:16:17.930Z",
+    "test_case": {
+      "name": "Property Management in Los Angeles",
+      "industry": "Property Management",
+      "location": "Los Angeles",
+      "minExpectedResults": 3
+    },
+    "scraping_attempts": [
+      {
+        "source": "google-maps",
+        "timestamp": "2025-05-10T09:16:17.930Z",
+        "query": "Property Management in Los Angeles",
+        "method": "puppeteer",
+        "status": "error"
+      },
+      {
+        "source": "yelp",
+        "timestamp": "2025-05-10T09:16:17.933Z",
+        "query": "Property Management in Los Angeles",
+        "method": "axios",
+        "status": "error"
+      },
+      {
+        "source": "yellowpages",
+        "timestamp": "2025-05-10T09:16:17.942Z",
+        "query": "Property Management in Los Angeles",
+        "method": "axios",
+        "status": "error"
+      },
+      {
+        "source": "yelp",
+        "timestamp": "2025-05-10T09:16:18.012Z",
+        "query": "Property Management in Los Angeles",
+        "method": "puppeteer-fallback",
+        "status": "error"
+      },
+      {
+        "source": "yellowpages",
+        "timestamp": "2025-05-10T09:16:18.022Z",
+        "query": "Property Management in Los Angeles",
+        "method": "puppeteer-fallback",
+        "status": "error"
+      }
+    ],
+    "scraping_results": [],
+    "error_details": [
+      {
+        "source": "google-maps-puppeteer",
+        "timestamp": "2025-05-10T09:16:17.956Z",
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "error": "Could not find Chrome (ver. 136.0.7103.92). This can occur if either\n 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or\n 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).\nFor (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.",
+        "stack": "Error: Could not find Chrome (ver. 136.0.7103.92). This can occur if either\n 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or\n 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).\nFor (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.\n    at ChromeLauncher.resolveExecutablePath (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:272:27)\n    at ChromeLauncher.computeLaunchArguments (/home/runner/workspace/node_modules/puppeteer-core/src/node/ChromeLauncher.ts:128:16)\n    at async ChromeLauncher.launch (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:48:28)\n    at async PuppeteerWrapper.createBrowser (/home/runner/workspace/server/api/puppeteer-wrapper.ts:54:23)\n    at async PuppeteerWrapper.newPage (/home/runner/workspace/server/api/puppeteer-wrapper.ts:126:24)\n    at async GoogleMapsScraper.searchWithPuppeteer (/home/runner/workspace/server/api/google-maps-scraper.ts:192:20)\n    at async GoogleMapsScraper.searchBusinesses (/home/runner/workspace/server/api/google-maps-scraper.ts:133:22)\n    at async Promise.allSettled (index 0)\n    at async SearchController.searchBusinessData (/home/runner/workspace/server/controllers/search-controller.ts:81:31)\n    at async SimplifiedSelfTest.runAllTests (/home/runner/workspace/server/api/simplified-self-test.ts:100:24)\n    at async TestHarness.runAllTests (/home/runner/workspace/server/api/test-harness.ts:65:27)\n    at async Timeout._onTimeout (/home/runner/workspace/server/startup.ts:18:27)"
+      },
+      {
+        "source": "google-maps",
+        "timestamp": "2025-05-10T09:16:17.956Z",
+        "error": "Could not find Chrome (ver. 136.0.7103.92). This can occur if either\n 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or\n 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).\nFor (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.",
+        "stack": "Error: Could not find Chrome (ver. 136.0.7103.92). This can occur if either\n 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or\n 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).\nFor (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.\n    at ChromeLauncher.resolveExecutablePath (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:272:27)\n    at ChromeLauncher.computeLaunchArguments (/home/runner/workspace/node_modules/puppeteer-core/src/node/ChromeLauncher.ts:128:16)\n    at async ChromeLauncher.launch (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:48:28)\n    at async PuppeteerWrapper.createBrowser (/home/runner/workspace/server/api/puppeteer-wrapper.ts:54:23)\n    at async PuppeteerWrapper.newPage (/home/runner/workspace/server/api/puppeteer-wrapper.ts:126:24)\n    at async GoogleMapsScraper.searchWithPuppeteer (/home/runner/workspace/server/api/google-maps-scraper.ts:192:20)\n    at async GoogleMapsScraper.searchBusinesses (/home/runner/workspace/server/api/google-maps-scraper.ts:133:22)\n    at async Promise.allSettled (index 0)\n    at async SearchController.searchBusinessData (/home/runner/workspace/server/controllers/search-controller.ts:81:31)\n    at async SimplifiedSelfTest.runAllTests (/home/runner/workspace/server/api/simplified-self-test.ts:100:24)\n    at async TestHarness.runAllTests (/home/runner/workspace/server/api/test-harness.ts:65:27)\n    at async Timeout._onTimeout (/home/runner/workspace/server/startup.ts:18:27)"
+      },
+      {
+        "source": "yelp-axios",
+        "timestamp": "2025-05-10T09:16:18.008Z",
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "error": "Request failed with status code 403",
+        "stack": "AxiosError: Request failed with status code 403\n    at settle (file:///home/runner/workspace/node_modules/axios/lib/core/settle.js:19:12)\n    at IncomingMessage.handleStreamEnd (file:///home/runner/workspace/node_modules/axios/lib/adapters/http.js:599:11)\n    at IncomingMessage.emit (node:events:530:35)\n    at endReadableNT (node:internal/streams/readable:1698:12)\n    at process.processTicksAndRejections (node:internal/process/task_queues:82:21)\n    at Axios.request (file:///home/runner/workspace/node_modules/axios/lib/core/Axios.js:45:41)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async YelpScraper.searchWithAxios (/home/runner/workspace/server/api/yelp-scraper.ts:558:24)\n    at async YelpScraper.searchBusinesses (/home/runner/workspace/server/api/yelp-scraper.ts:131:22)\n    at async Promise.allSettled (index 1)\n    at async SearchController.searchBusinessData (/home/runner/workspace/server/controllers/search-controller.ts:81:31)\n    at async SimplifiedSelfTest.runAllTests (/home/runner/workspace/server/api/simplified-self-test.ts:100:24)\n    at async TestHarness.runAllTests (/home/runner/workspace/server/api/test-harness.ts:65:27)\n    at async Timeout._onTimeout (/home/runner/workspace/server/startup.ts:18:27)"
+      },
+      {
+        "source": "yelp-axios",
+        "timestamp": "2025-05-10T09:16:18.008Z",
+        "error": "Request failed with status code 403",
+        "stack": "AxiosError: Request failed with status code 403\n    at settle (file:///home/runner/workspace/node_modules/axios/lib/core/settle.js:19:12)\n    at IncomingMessage.handleStreamEnd (file:///home/runner/workspace/node_modules/axios/lib/adapters/http.js:599:11)\n    at IncomingMessage.emit (node:events:530:35)\n    at endReadableNT (node:internal/streams/readable:1698:12)\n    at process.processTicksAndRejections (node:internal/process/task_queues:82:21)\n    at Axios.request (file:///home/runner/workspace/node_modules/axios/lib/core/Axios.js:45:41)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async YelpScraper.searchWithAxios (/home/runner/workspace/server/api/yelp-scraper.ts:558:24)\n    at async YelpScraper.searchBusinesses (/home/runner/workspace/server/api/yelp-scraper.ts:131:22)\n    at async Promise.allSettled (index 1)\n    at async SearchController.searchBusinessData (/home/runner/workspace/server/controllers/search-controller.ts:81:31)\n    at async SimplifiedSelfTest.runAllTests (/home/runner/workspace/server/api/simplified-self-test.ts:100:24)\n    at async TestHarness.runAllTests (/home/runner/workspace/server/api/test-harness.ts:65:27)\n    at async Timeout._onTimeout (/home/runner/workspace/server/startup.ts:18:27)"
+      },
+      {
+        "source": "yelp-puppeteer",
+        "timestamp": "2025-05-10T09:16:18.013Z",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+        "error": "Could not find Chrome (ver. 136.0.7103.92). This can occur if either\n 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or\n 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).\nFor (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.",
+        "stack": "Error: Could not find Chrome (ver. 136.0.7103.92). This can occur if either\n 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or\n 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).\nFor (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.\n    at ChromeLauncher.resolveExecutablePath (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:272:27)\n    at ChromeLauncher.computeLaunchArguments (/home/runner/workspace/node_modules/puppeteer-core/src/node/ChromeLauncher.ts:128:16)\n    at async ChromeLauncher.launch (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:48:28)\n    at async PuppeteerWrapper.createBrowser (/home/runner/workspace/server/api/puppeteer-wrapper.ts:54:23)\n    at async PuppeteerWrapper.newPage (/home/runner/workspace/server/api/puppeteer-wrapper.ts:126:24)\n    at async YelpScraper.searchWithPuppeteer (/home/runner/workspace/server/api/yelp-scraper.ts:698:20)\n    at async YelpScraper.searchBusinesses (/home/runner/workspace/server/api/yelp-scraper.ts:212:32)\n    at async Promise.allSettled (index 1)\n    at async SearchController.searchBusinessData (/home/runner/workspace/server/controllers/search-controller.ts:81:31)\n    at async SimplifiedSelfTest.runAllTests (/home/runner/workspace/server/api/simplified-self-test.ts:100:24)\n    at async TestHarness.runAllTests (/home/runner/workspace/server/api/test-harness.ts:65:27)\n    at async Timeout._onTimeout (/home/runner/workspace/server/startup.ts:18:27)"
+      },
+      {
+        "source": "yelp-puppeteer",
+        "timestamp": "2025-05-10T09:16:18.013Z",
+        "error": "Could not find Chrome (ver. 136.0.7103.92). This can occur if either\n 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or\n 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).\nFor (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.",
+        "stack": "Error: Could not find Chrome (ver. 136.0.7103.92). This can occur if either\n 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or\n 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).\nFor (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.\n    at ChromeLauncher.resolveExecutablePath (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:272:27)\n    at ChromeLauncher.computeLaunchArguments (/home/runner/workspace/node_modules/puppeteer-core/src/node/ChromeLauncher.ts:128:16)\n    at async ChromeLauncher.launch (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:48:28)\n    at async PuppeteerWrapper.createBrowser (/home/runner/workspace/server/api/puppeteer-wrapper.ts:54:23)\n    at async PuppeteerWrapper.newPage (/home/runner/workspace/server/api/puppeteer-wrapper.ts:126:24)\n    at async YelpScraper.searchWithPuppeteer (/home/runner/workspace/server/api/yelp-scraper.ts:698:20)\n    at async YelpScraper.searchBusinesses (/home/runner/workspace/server/api/yelp-scraper.ts:212:32)\n    at async Promise.allSettled (index 1)\n    at async SearchController.searchBusinessData (/home/runner/workspace/server/controllers/search-controller.ts:81:31)\n    at async SimplifiedSelfTest.runAllTests (/home/runner/workspace/server/api/simplified-self-test.ts:100:24)\n    at async TestHarness.runAllTests (/home/runner/workspace/server/api/test-harness.ts:65:27)\n    at async Timeout._onTimeout (/home/runner/workspace/server/startup.ts:18:27)"
+      },
+      {
+        "source": "yellowpages-axios",
+        "timestamp": "2025-05-10T09:16:18.020Z",
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "error": "Request failed with status code 403",
+        "stack": "AxiosError: Request failed with status code 403\n    at settle (file:///home/runner/workspace/node_modules/axios/lib/core/settle.js:19:12)\n    at Unzip.handleStreamEnd (file:///home/runner/workspace/node_modules/axios/lib/adapters/http.js:599:11)\n    at Unzip.emit (node:events:530:35)\n    at endReadableNT (node:internal/streams/readable:1698:12)\n    at process.processTicksAndRejections (node:internal/process/task_queues:82:21)\n    at Axios.request (file:///home/runner/workspace/node_modules/axios/lib/core/Axios.js:45:41)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async YellowPagesScraper.searchWithAxios (/home/runner/workspace/server/api/yellow-pages-scraper.ts:286:24)\n    at async YellowPagesScraper.searchBusinesses (/home/runner/workspace/server/api/yellow-pages-scraper.ts:131:22)\n    at async Promise.allSettled (index 2)\n    at async SearchController.searchBusinessData (/home/runner/workspace/server/controllers/search-controller.ts:81:31)\n    at async SimplifiedSelfTest.runAllTests (/home/runner/workspace/server/api/simplified-self-test.ts:100:24)\n    at async TestHarness.runAllTests (/home/runner/workspace/server/api/test-harness.ts:65:27)\n    at async Timeout._onTimeout (/home/runner/workspace/server/startup.ts:18:27)"
+      },
+      {
+        "source": "yellowpages-axios",
+        "timestamp": "2025-05-10T09:16:18.020Z",
+        "error": "Request failed with status code 403",
+        "stack": "AxiosError: Request failed with status code 403\n    at settle (file:///home/runner/workspace/node_modules/axios/lib/core/settle.js:19:12)\n    at Unzip.handleStreamEnd (file:///home/runner/workspace/node_modules/axios/lib/adapters/http.js:599:11)\n    at Unzip.emit (node:events:530:35)\n    at endReadableNT (node:internal/streams/readable:1698:12)\n    at process.processTicksAndRejections (node:internal/process/task_queues:82:21)\n    at Axios.request (file:///home/runner/workspace/node_modules/axios/lib/core/Axios.js:45:41)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async YellowPagesScraper.searchWithAxios (/home/runner/workspace/server/api/yellow-pages-scraper.ts:286:24)\n    at async YellowPagesScraper.searchBusinesses (/home/runner/workspace/server/api/yellow-pages-scraper.ts:131:22)\n    at async Promise.allSettled (index 2)\n    at async SearchController.searchBusinessData (/home/runner/workspace/server/controllers/search-controller.ts:81:31)\n    at async SimplifiedSelfTest.runAllTests (/home/runner/workspace/server/api/simplified-self-test.ts:100:24)\n    at async TestHarness.runAllTests (/home/runner/workspace/server/api/test-harness.ts:65:27)\n    at async Timeout._onTimeout (/home/runner/workspace/server/startup.ts:18:27)"
+      },
+      {
+        "source": "yellowpages-puppeteer",
+        "timestamp": "2025-05-10T09:16:18.024Z",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+        "error": "Could not find Chrome (ver. 136.0.7103.92). This can occur if either\n 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or\n 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).\nFor (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.",
+        "stack": "Error: Could not find Chrome (ver. 136.0.7103.92). This can occur if either\n 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or\n 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).\nFor (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.\n    at ChromeLauncher.resolveExecutablePath (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:272:27)\n    at ChromeLauncher.computeLaunchArguments (/home/runner/workspace/node_modules/puppeteer-core/src/node/ChromeLauncher.ts:128:16)\n    at async ChromeLauncher.launch (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:48:28)\n    at async PuppeteerWrapper.createBrowser (/home/runner/workspace/server/api/puppeteer-wrapper.ts:54:23)\n    at async PuppeteerWrapper.newPage (/home/runner/workspace/server/api/puppeteer-wrapper.ts:126:24)\n    at async YellowPagesScraper.searchWithPuppeteer (/home/runner/workspace/server/api/yellow-pages-scraper.ts:469:20)\n    at async YellowPagesScraper.searchBusinesses (/home/runner/workspace/server/api/yellow-pages-scraper.ts:212:32)\n    at async Promise.allSettled (index 2)\n    at async SearchController.searchBusinessData (/home/runner/workspace/server/controllers/search-controller.ts:81:31)\n    at async SimplifiedSelfTest.runAllTests (/home/runner/workspace/server/api/simplified-self-test.ts:100:24)\n    at async TestHarness.runAllTests (/home/runner/workspace/server/api/test-harness.ts:65:27)\n    at async Timeout._onTimeout (/home/runner/workspace/server/startup.ts:18:27)"
+      },
+      {
+        "source": "yellowpages-puppeteer",
+        "timestamp": "2025-05-10T09:16:18.024Z",
+        "error": "Could not find Chrome (ver. 136.0.7103.92). This can occur if either\n 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or\n 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).\nFor (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.",
+        "stack": "Error: Could not find Chrome (ver. 136.0.7103.92). This can occur if either\n 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or\n 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).\nFor (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.\n    at ChromeLauncher.resolveExecutablePath (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:272:27)\n    at ChromeLauncher.computeLaunchArguments (/home/runner/workspace/node_modules/puppeteer-core/src/node/ChromeLauncher.ts:128:16)\n    at async ChromeLauncher.launch (/home/runner/workspace/node_modules/puppeteer-core/lib/esm/puppeteer/node/BrowserLauncher.js:48:28)\n    at async PuppeteerWrapper.createBrowser (/home/runner/workspace/server/api/puppeteer-wrapper.ts:54:23)\n    at async PuppeteerWrapper.newPage (/home/runner/workspace/server/api/puppeteer-wrapper.ts:126:24)\n    at async YellowPagesScraper.searchWithPuppeteer (/home/runner/workspace/server/api/yellow-pages-scraper.ts:469:20)\n    at async YellowPagesScraper.searchBusinesses (/home/runner/workspace/server/api/yellow-pages-scraper.ts:212:32)\n    at async Promise.allSettled (index 2)\n    at async SearchController.searchBusinessData (/home/runner/workspace/server/controllers/search-controller.ts:81:31)\n    at async SimplifiedSelfTest.runAllTests (/home/runner/workspace/server/api/simplified-self-test.ts:100:24)\n    at async TestHarness.runAllTests (/home/runner/workspace/server/api/test-harness.ts:65:27)\n    at async Timeout._onTimeout (/home/runner/workspace/server/startup.ts:18:27)"
+      }
+    ]
+  }
+}

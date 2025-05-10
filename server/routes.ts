@@ -237,7 +237,254 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ error: "Error fetching search history" });
     }
   });
+
+  // Export search results to Google Sheets
+  app.post("/api/export-to-sheets", async (req: Request, res: Response) => {
+    try {
+      console.log("📊 API /export-to-sheets route called with request body:", req.body);
+      
+      // Check if we have required parameters
+      const { searchId, spreadsheetId } = req.body;
+      
+      if (!spreadsheetId) {
+        return res.status(400).json({ 
+          error: "Missing required parameters", 
+          message: "Please provide a spreadsheetId parameter" 
+        });
+      }
+      
+      // Generate execution ID for tracking this export
+      const executionId = `export-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      console.log(`📊 [${executionId}] Starting Google Sheets export`);
+      
+      // Import needed modules
+      const { googleSheetsService } = await import('./api/google-sheets-service');
+      const { searchController } = await import('./controllers/search-controller');
+      
+      // If searchId is provided, get that specific search from history
+      let searchParams: any = {};
+      let businesses: BusinessData[] = [];
+      
+      if (searchId) {
+        const searchHistory = await storage.getSearchHistory();
+        const searchEntry = searchHistory.find(entry => entry.id === parseInt(searchId));
+        
+        if (!searchEntry) {
+          return res.status(404).json({ 
+            error: "Search not found", 
+            message: "The specified search ID was not found in search history" 
+          });
+        }
+        
+        console.log(`📊 [${executionId}] Found search in history: "${searchEntry.query}"`);
+        
+        // Parse the query to extract search parameters
+        let industry, location, companyName;
+        
+        if (searchEntry.query.includes(" in ")) {
+          // Format: "industry in location"
+          [industry, location] = searchEntry.query.split(" in ").map(s => s.trim());
+        } else {
+          // Assume it's a company name or just industry/location
+          if (/[A-Z]/.test(searchEntry.query) || /[&\-',.]/.test(searchEntry.query)) {
+            companyName = searchEntry.query;
+          } else {
+            industry = searchEntry.query;
+          }
+        }
+        
+        // Execute the search to get fresh data
+        console.log(`📊 [${executionId}] Re-executing search with parameters: industry=${industry}, location=${location}, company=${companyName}`);
+        
+        searchParams = {
+          industry,
+          location,
+          companyName,
+          executionId
+        };
+        
+        const searchResult = await searchController.searchBusinessData(searchParams);
+        
+        if (searchResult && 'businesses' in searchResult) {
+          businesses = searchResult.businesses;
+        } else {
+          return res.status(404).json({
+            error: "No data found",
+            message: "The search did not return any business data to export"
+          });
+        }
+      } else {
+        // If no searchId, check if we have raw business data in request
+        if (req.body.businesses && Array.isArray(req.body.businesses)) {
+          businesses = req.body.businesses;
+        } else {
+          return res.status(400).json({
+            error: "Missing data",
+            message: "Please provide either a searchId or businesses data to export"
+          });
+        }
+      }
+      
+      // Now export to Google Sheets
+      if (businesses.length === 0) {
+        return res.status(404).json({
+          error: "No data to export",
+          message: "No business data found to export to Google Sheets"
+        });
+      }
+      
+      // Generate a sheet name based on search parameters or timestamp
+      let sheetName = "Lead Data";
+      if (searchParams.industry) sheetName = `${searchParams.industry}`;
+      if (searchParams.location) sheetName += ` ${searchParams.location}`;
+      if (sheetName === "Lead Data" && searchParams.companyName) sheetName = searchParams.companyName;
+      sheetName += ` - ${new Date().toLocaleDateString()}`;
+      
+      // Export the data
+      console.log(`📊 [${executionId}] Exporting ${businesses.length} businesses to Google Sheets (ID: ${spreadsheetId})`);
+      
+      const exportResult = await googleSheetsService.exportBusinessData(
+        businesses,
+        {
+          spreadsheetId,
+          sheetName,
+          includeContactDetails: true
+        }
+      );
+      
+      // Return the result
+      return res.status(200).json({
+        status: exportResult.success ? "success" : "error",
+        message: exportResult.message,
+        spreadsheetUrl: exportResult.url,
+        timestamp: new Date().toISOString(),
+        execution_id: executionId,
+        data_exported: {
+          businesses: businesses.length,
+          contacts: businesses.reduce((count, b) => count + (b.contacts?.length || 0), 0)
+        }
+      });
+    } catch (error) {
+      console.error("📊 Error exporting to Google Sheets:", error);
+      return res.status(500).json({ 
+        error: "Export failed", 
+        message: `Error exporting to Google Sheets: ${(error as Error).message}`
+      });
+    }
+  });
   
+  // Check Google Sheets API setup and create a new sheet if needed
+  app.get("/api/sheets-status", async (req: Request, res: Response) => {
+    try {
+      console.log(`📊 Checking Google Sheets API status`);
+      
+      // Import Google Sheets service
+      const { googleSheetsService } = await import('./api/google-sheets-service');
+      
+      // Check if we're authorized 
+      const isAuthorized = googleSheetsService.isAuthorized();
+      
+      // Return the status
+      const response = {
+        status: isAuthorized ? "configured" : "not_configured",
+        timestamp: new Date().toISOString(),
+        auth_method: null as string | null,
+        last_export: googleSheetsService.getLastExport() || null
+      };
+      
+      if (isAuthorized) {
+        response.auth_method = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON ? 
+          "service_account" : (process.env.GOOGLE_API_KEY ? "api_key" : "unknown");
+      }
+      
+      // Provide instructions for setting up if not configured
+      if (!isAuthorized) {
+        return res.status(200).json({
+          ...response,
+          setup_instructions: {
+            message: "Google Sheets API is not configured. You need to provide either a service account JSON or an API key.",
+            options: [
+              {
+                name: "Service Account (Recommended)",
+                env_var: "GOOGLE_APPLICATION_CREDENTIALS_JSON",
+                description: "Full service account JSON credentials from Google Cloud Console"
+              },
+              {
+                name: "API Key",
+                env_var: "GOOGLE_API_KEY",
+                description: "Simple API key from Google Cloud Console (limited functionality)"
+              }
+            ],
+            additional_settings: [
+              {
+                name: "Spreadsheet ID",
+                env_var: "GOOGLE_SHEETS_ID",
+                description: "ID of an existing Google Sheet to export data to (optional)"
+              },
+              {
+                name: "Auto-Export",
+                env_var: "AUTO_EXPORT_TO_SHEETS",
+                description: "Set to 'true' to automatically export search results to Google Sheets"
+              }
+            ]
+          }
+        });
+      }
+      
+      return res.status(200).json(response);
+    } catch (error) {
+      console.error(`❌ Error checking Google Sheets status:`, error);
+      return res.status(500).json({ 
+        error: "Failed to check Google Sheets status", 
+        message: (error as Error).message 
+      });
+    }
+  });
+  
+  // Create a new Google Sheet for exports
+  app.post("/api/create-sheet", async (req: Request, res: Response) => {
+    try {
+      const { title } = req.body;
+      
+      if (!title) {
+        return res.status(400).json({
+          error: "Missing title",
+          message: "Please provide a title for the new Google Sheet"
+        });
+      }
+      
+      console.log(`📊 Creating new Google Sheet with title: ${title}`);
+      
+      // Import Google Sheets service
+      const { googleSheetsService } = await import('./api/google-sheets-service');
+      
+      // Check if we're authorized
+      if (!googleSheetsService.isAuthorized()) {
+        return res.status(400).json({
+          error: "Not configured",
+          message: "Google Sheets API is not properly configured. Check /api/sheets-status for setup instructions."
+        });
+      }
+      
+      // Create the sheet
+      const spreadsheetId = await googleSheetsService.createSpreadsheet(title);
+      
+      return res.status(200).json({
+        status: "success",
+        message: `Created new Google Sheet: ${title}`,
+        spreadsheetId,
+        spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error(`❌ Error creating Google Sheet:`, error);
+      return res.status(500).json({ 
+        error: "Failed to create Google Sheet", 
+        message: (error as Error).message 
+      });
+    }
+  });
+
   // Self-test endpoint to verify scraping functionality
   app.get("/scrape/self-test", async (req: Request, res: Response) => {
     try {
@@ -399,6 +646,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
             position: contact.position,
             email: contact.email,
             phone: contact.companyPhone || contact.personalPhone,
+            is_decision_maker: contact.isDecisionMaker
+          }))
+        })),
+        metadata: {
+          page: page,
+          limit: limit,
+          total_results: totalResults,
+          total_pages: totalPages,
+          query_params: {
+            query,
+            location
+          },
+          scrape_sources: scrapingResult.sources,
+          execution_log: executionLog
+        }
+      });
+      
+      // Auto-export to Google Sheets if enabled
+      if (process.env.AUTO_EXPORT_TO_SHEETS === 'true' && process.env.GOOGLE_SHEETS_ID) {
+        try {
+          console.log(`📊 [${executionId}] Auto-exporting results to Google Sheets`);
+          
+          // Import Google Sheets service
+          const { googleSheetsService } = await import('./api/google-sheets-service');
+          
+          // Export data
+          const exportResult = await googleSheetsService.exportBusinessData(
+            scrapingResult.businesses,
+            {
+              spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+              sheetName: `${query || location || 'Leads'} - ${new Date().toLocaleDateString()}`,
+              includeContactDetails: true
+            }
+          );
+          
+          console.log(`📊 [${executionId}] Google Sheets export result:`, exportResult);
+        } catch (exportError) {
+          console.error(`❌ [${executionId}] Error exporting to Google Sheets:`, exportError);
+          // Don't fail the request if export fails
+        }
+      }
+      
+      return res.status(200).json({
+        status: "success",
+        timestamp: new Date().toISOString(),
+        execution_id: executionId,
+        execution_time_ms: executionTime,
+        data: scrapingResult.businesses.map((business: BusinessData) => ({
+          business_name: business.name,
+          industry: business.industry,
+          location: business.location,
+          address: business.address,
+          phone: business.phoneNumber,
+          website: business.website,
+          contacts: business.contacts.map((contact: any) => ({
+            name: contact.name,
+            position: contact.position,
+            email: contact.email,
+            phone: contact.phoneNumber,
             is_decision_maker: contact.isDecisionMaker
           }))
         })),

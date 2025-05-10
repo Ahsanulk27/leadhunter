@@ -49,9 +49,10 @@ export class PuppeteerWrapper {
       
       console.log(`🌐 PuppeteerWrapper: Creating new browser (ID: ${id})`);
       
-      // Launch a new browser with stealth mode settings
+      // Launch a new browser with stealth mode settings - use puppeteer instead of puppeteer-core
+      // This ensures we use the bundled Chromium instead of trying to find a system Chrome installation
       const browser = await puppeteer.launch({
-        headless: 'new', // Use the new headless mode
+        headless: true, // Use true instead of 'new' for compatibility
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox', 

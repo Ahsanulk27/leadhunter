@@ -62,12 +62,11 @@ export class GoogleSheetsService {
       
       // Check for API key-based access
       if (process.env.GOOGLE_API_KEY) {
-        const auth = new google.auth.GoogleAuth({
-          key: process.env.GOOGLE_API_KEY,
-          scopes: ['https://www.googleapis.com/auth/spreadsheets']
+        // Use simple API key auth
+        this.sheets = google.sheets({ 
+          version: 'v4', 
+          auth: process.env.GOOGLE_API_KEY 
         });
-        
-        this.sheets = google.sheets({ version: 'v4', auth });
         this.authorized = true;
         console.log('Google Sheets service initialized with API key');
         return true;
