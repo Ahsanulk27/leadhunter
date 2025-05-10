@@ -343,6 +343,25 @@ function generateRandomLocation(): string {
   return locations[Math.floor(Math.random() * locations.length)];
 }
 
+function getLocationFromCode(locationCode: string): string {
+  const locationMap: {[key: string]: string} = {
+    'new_york': 'New York, NY',
+    'los_angeles': 'Los Angeles, CA',
+    'chicago': 'Chicago, IL',
+    'miami': 'Miami, FL',
+    'dallas': 'Dallas, TX',
+    'seattle': 'Seattle, WA',
+    'boston': 'Boston, MA',
+    'san_francisco': 'San Francisco, CA',
+    'denver': 'Denver, CO',
+    'atlanta': 'Atlanta, GA',
+    'houston': 'Houston, TX',
+    'philadelphia': 'Philadelphia, PA'
+  };
+  
+  return locationMap[locationCode] || locationCode;
+}
+
 function generateRandomSize(): string {
   const sizes = ["1-10", "11-50", "51-200", "201-500", "501+"];
   return sizes[Math.floor(Math.random() * sizes.length)];

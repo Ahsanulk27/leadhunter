@@ -40,38 +40,57 @@ export default function SearchForm({ onSearch, isLoading }: SearchFormProps) {
         <form onSubmit={handleSubmit(handleFormSubmit)}>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="col-span-1 md:col-span-2">
-              <Label htmlFor="company" className="block text-sm font-medium text-gray-700 mb-1">
-                Company Name
-              </Label>
-              <Input
-                id="company"
-                placeholder="e.g. Acme Corporation"
-                {...register("company", { required: true })}
-                className={formState.errors.company ? "border-red-500" : ""}
-              />
-              {formState.errors.company && (
-                <p className="mt-1 text-xs text-red-500">Company name is required</p>
-              )}
-            </div>
-            <div className="col-span-1">
               <Label htmlFor="industry" className="block text-sm font-medium text-gray-700 mb-1">
-                Industry (Optional)
+                Business Niche / Industry
               </Label>
               <Select
                 onValueChange={(value) => setValue("industry", value)}
-                defaultValue=""
+                defaultValue="real_estate"
               >
                 <SelectTrigger id="industry">
-                  <SelectValue placeholder="All Industries" />
+                  <SelectValue placeholder="Select Business Niche" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Industries</SelectItem>
-                  <SelectItem value="technology">Technology</SelectItem>
-                  <SelectItem value="healthcare">Healthcare</SelectItem>
-                  <SelectItem value="finance">Finance</SelectItem>
-                  <SelectItem value="retail">Retail</SelectItem>
-                  <SelectItem value="manufacturing">Manufacturing</SelectItem>
-                  <SelectItem value="real_estate">Real Estate</SelectItem>
+                  <SelectItem value="real_estate">Residential Real Estate</SelectItem>
+                  <SelectItem value="commercial_real_estate">Commercial Real Estate</SelectItem>
+                  <SelectItem value="property_management">Property Management</SelectItem>
+                  <SelectItem value="real_estate_development">Real Estate Development</SelectItem>
+                  <SelectItem value="luxury_real_estate">Luxury Real Estate</SelectItem>
+                  <SelectItem value="property_investment">Real Estate Investment</SelectItem>
+                  <SelectItem value="property_brokerage">Property Brokerage</SelectItem>
+                  <SelectItem value="real_estate_tech">Real Estate Technology</SelectItem>
+                  <SelectItem value="mortgage_brokers">Mortgage Brokers</SelectItem>
+                  <SelectItem value="real_estate_appraisal">Real Estate Appraisal</SelectItem>
+                  <SelectItem value="title_companies">Title Companies</SelectItem>
+                  <SelectItem value="construction">Construction Companies</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="col-span-1">
+              <Label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">
+                Location
+              </Label>
+              <Select
+                onValueChange={(value) => setValue("location", value)}
+                defaultValue="new_york"
+              >
+                <SelectTrigger id="location">
+                  <SelectValue placeholder="Select Location" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="new_york">New York, NY</SelectItem>
+                  <SelectItem value="los_angeles">Los Angeles, CA</SelectItem>
+                  <SelectItem value="chicago">Chicago, IL</SelectItem>
+                  <SelectItem value="miami">Miami, FL</SelectItem>
+                  <SelectItem value="dallas">Dallas, TX</SelectItem>
+                  <SelectItem value="seattle">Seattle, WA</SelectItem>
+                  <SelectItem value="boston">Boston, MA</SelectItem>
+                  <SelectItem value="san_francisco">San Francisco, CA</SelectItem>
+                  <SelectItem value="denver">Denver, CO</SelectItem>
+                  <SelectItem value="atlanta">Atlanta, GA</SelectItem>
+                  <SelectItem value="houston">Houston, TX</SelectItem>
+                  <SelectItem value="philadelphia">Philadelphia, PA</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -80,28 +99,33 @@ export default function SearchForm({ onSearch, isLoading }: SearchFormProps) {
           {showAdvancedFilters && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
               <div className="col-span-1">
-                <Label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">
-                  Location (Optional)
-                </Label>
-                <Input
-                  id="location"
-                  placeholder="e.g. San Francisco, CA"
-                  {...register("location")}
-                />
-              </div>
-              <div className="col-span-1">
                 <Label htmlFor="position" className="block text-sm font-medium text-gray-700 mb-1">
-                  Contact Position (Optional)
+                  Target Position
                 </Label>
-                <Input
-                  id="position"
-                  placeholder="e.g. Sales Manager"
-                  {...register("position")}
-                />
+                <Select
+                  onValueChange={(value) => setValue("position", value)}
+                  defaultValue=""
+                >
+                  <SelectTrigger id="position">
+                    <SelectValue placeholder="Any Position" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="broker_owner">Broker/Owner</SelectItem>
+                    <SelectItem value="managing_broker">Managing Broker</SelectItem>
+                    <SelectItem value="director">Director</SelectItem>
+                    <SelectItem value="vp_sales">VP of Sales</SelectItem>
+                    <SelectItem value="real_estate_agent">Real Estate Agent</SelectItem>
+                    <SelectItem value="property_manager">Property Manager</SelectItem>
+                    <SelectItem value="mortgage_broker">Mortgage Broker</SelectItem>
+                    <SelectItem value="real_estate_developer">Real Estate Developer</SelectItem>
+                    <SelectItem value="real_estate_investor">Real Estate Investor</SelectItem>
+                    <SelectItem value="marketing_director">Marketing Director</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="col-span-1">
                 <Label htmlFor="size" className="block text-sm font-medium text-gray-700 mb-1">
-                  Company Size (Optional)
+                  Company Size
                 </Label>
                 <Select
                   onValueChange={(value) => setValue("size", value)}
@@ -119,6 +143,16 @@ export default function SearchForm({ onSearch, isLoading }: SearchFormProps) {
                     <SelectItem value="501+">501+ employees</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="col-span-1">
+                <Label htmlFor="company" className="block text-sm font-medium text-gray-700 mb-1">
+                  Specific Company (Optional)
+                </Label>
+                <Input
+                  id="company"
+                  placeholder="e.g. ABC Properties"
+                  {...register("company")}
+                />
               </div>
             </div>
           )}
