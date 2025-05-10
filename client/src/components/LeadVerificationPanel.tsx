@@ -124,7 +124,7 @@ const LeadVerificationPanel: React.FC<LeadVerificationPanelProps> = ({
           result.warnings.push('Identity information did not match records');
         }
         
-        if (result.details && result.details.fraudScore > 25) {
+        if (result.details && result.details.fraudScore !== undefined && result.details.fraudScore > 25) {
           result.details.blacklistStatus = 'suspicious';
           result.details.ipReputation = 'moderate';
         }
@@ -163,8 +163,8 @@ const LeadVerificationPanel: React.FC<LeadVerificationPanelProps> = ({
           <span>Lead Verification</span>
           {verification && (
             <Badge
-              variant={verification.isVerified ? "success" : "destructive"}
-              className="ml-2"
+              variant={verification.isVerified ? "outline" : "destructive"}
+              className={`ml-2 ${verification.isVerified ? "bg-green-50 text-green-700 border-green-200" : ""}`}
             >
               {verification.isVerified ? "Verified" : "Unverified"}
             </Badge>

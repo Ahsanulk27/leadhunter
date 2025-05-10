@@ -452,6 +452,13 @@ const ConsumerBulkLeads: React.FC = () => {
                             {lead.propertyType} • {lead.budget}
                           </div>
                         </TableCell>
+                        <TableCell>
+                          <LeadValidationIndicator 
+                            lead={lead} 
+                            size="sm"
+                            showStatus={false}
+                          />
+                        </TableCell>
                         <TableCell className="text-right">
                           <div 
                             className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
