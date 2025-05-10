@@ -51,18 +51,60 @@ export default function SearchForm({ onSearch, isLoading }: SearchFormProps) {
                   <SelectValue placeholder="Select Business Niche" />
                 </SelectTrigger>
                 <SelectContent>
+                  {/* Technology */}
+                  <SelectItem value="software_development">Software Development</SelectItem>
+                  <SelectItem value="it_consulting">IT Consulting</SelectItem>
+                  <SelectItem value="cybersecurity">Cybersecurity</SelectItem>
+                  <SelectItem value="web_development">Web Development</SelectItem>
+                  <SelectItem value="cloud_services">Cloud Services</SelectItem>
+                  <SelectItem value="app_development">Mobile App Development</SelectItem>
+                  <SelectItem value="ai_ml">AI & Machine Learning</SelectItem>
+                  <SelectItem value="data_analytics">Data Analytics</SelectItem>
+                  
+                  {/* Finance */}
+                  <SelectItem value="financial_services">Financial Services</SelectItem>
+                  <SelectItem value="banking">Banking</SelectItem>
+                  <SelectItem value="investment_firms">Investment Firms</SelectItem>
+                  <SelectItem value="insurance">Insurance</SelectItem>
+                  <SelectItem value="accounting">Accounting & Tax</SelectItem>
+                  <SelectItem value="fintech">Financial Technology</SelectItem>
+                  
+                  {/* Healthcare */}
+                  <SelectItem value="hospitals">Hospitals & Clinics</SelectItem>
+                  <SelectItem value="biotech">Biotech</SelectItem>
+                  <SelectItem value="pharmaceutical">Pharmaceutical</SelectItem>
+                  <SelectItem value="medical_devices">Medical Devices</SelectItem>
+                  <SelectItem value="healthcare_tech">Healthcare Technology</SelectItem>
+                  
+                  {/* Real Estate */}
                   <SelectItem value="real_estate">Residential Real Estate</SelectItem>
                   <SelectItem value="commercial_real_estate">Commercial Real Estate</SelectItem>
                   <SelectItem value="property_management">Property Management</SelectItem>
                   <SelectItem value="real_estate_development">Real Estate Development</SelectItem>
-                  <SelectItem value="luxury_real_estate">Luxury Real Estate</SelectItem>
-                  <SelectItem value="property_investment">Real Estate Investment</SelectItem>
-                  <SelectItem value="property_brokerage">Property Brokerage</SelectItem>
-                  <SelectItem value="real_estate_tech">Real Estate Technology</SelectItem>
-                  <SelectItem value="mortgage_brokers">Mortgage Brokers</SelectItem>
-                  <SelectItem value="real_estate_appraisal">Real Estate Appraisal</SelectItem>
-                  <SelectItem value="title_companies">Title Companies</SelectItem>
-                  <SelectItem value="construction">Construction Companies</SelectItem>
+                  
+                  {/* Marketing & Advertising */}
+                  <SelectItem value="marketing_agencies">Marketing Agencies</SelectItem>
+                  <SelectItem value="advertising">Advertising</SelectItem>
+                  <SelectItem value="digital_marketing">Digital Marketing</SelectItem>
+                  <SelectItem value="pr_firms">Public Relations</SelectItem>
+                  <SelectItem value="seo_agencies">SEO & Content Marketing</SelectItem>
+                  
+                  {/* Retail & Manufacturing */}
+                  <SelectItem value="retail">Retail</SelectItem>
+                  <SelectItem value="ecommerce">E-commerce</SelectItem>
+                  <SelectItem value="manufacturing">Manufacturing</SelectItem>
+                  <SelectItem value="wholesale">Wholesale Distribution</SelectItem>
+                  <SelectItem value="consumer_products">Consumer Products</SelectItem>
+                  
+                  {/* Other Industries */}
+                  <SelectItem value="legal">Legal Services</SelectItem>
+                  <SelectItem value="education">Education</SelectItem>
+                  <SelectItem value="hospitality">Hospitality</SelectItem>
+                  <SelectItem value="construction">Construction</SelectItem>
+                  <SelectItem value="transportation">Transportation & Logistics</SelectItem>
+                  <SelectItem value="energy">Energy & Utilities</SelectItem>
+                  <SelectItem value="agriculture">Agriculture</SelectItem>
+                  <SelectItem value="nonprofit">Non-Profit</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -110,16 +152,40 @@ export default function SearchForm({ onSearch, isLoading }: SearchFormProps) {
                     <SelectValue placeholder="Any Position" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="broker_owner">Broker/Owner</SelectItem>
-                    <SelectItem value="managing_broker">Managing Broker</SelectItem>
-                    <SelectItem value="director">Director</SelectItem>
+                    {/* Executive Roles */}
+                    <SelectItem value="ceo">CEO/President</SelectItem>
+                    <SelectItem value="coo">COO</SelectItem>
+                    <SelectItem value="cfo">CFO</SelectItem>
+                    <SelectItem value="cto">CTO/CIO</SelectItem>
+                    <SelectItem value="cmo">CMO</SelectItem>
+                    <SelectItem value="owner">Owner/Founder</SelectItem>
+                    
+                    {/* VP Level */}
                     <SelectItem value="vp_sales">VP of Sales</SelectItem>
-                    <SelectItem value="real_estate_agent">Real Estate Agent</SelectItem>
-                    <SelectItem value="property_manager">Property Manager</SelectItem>
-                    <SelectItem value="mortgage_broker">Mortgage Broker</SelectItem>
-                    <SelectItem value="real_estate_developer">Real Estate Developer</SelectItem>
-                    <SelectItem value="real_estate_investor">Real Estate Investor</SelectItem>
-                    <SelectItem value="marketing_director">Marketing Director</SelectItem>
+                    <SelectItem value="vp_marketing">VP of Marketing</SelectItem>
+                    <SelectItem value="vp_operations">VP of Operations</SelectItem>
+                    <SelectItem value="vp_technology">VP of Technology</SelectItem>
+                    <SelectItem value="vp_business_dev">VP of Business Development</SelectItem>
+                    
+                    {/* Director Level */}
+                    <SelectItem value="director_sales">Director of Sales</SelectItem>
+                    <SelectItem value="director_marketing">Director of Marketing</SelectItem>
+                    <SelectItem value="director_operations">Director of Operations</SelectItem>
+                    <SelectItem value="director_it">Director of IT</SelectItem>
+                    <SelectItem value="director_hr">Director of HR</SelectItem>
+                    
+                    {/* Manager Level */}
+                    <SelectItem value="sales_manager">Sales Manager</SelectItem>
+                    <SelectItem value="marketing_manager">Marketing Manager</SelectItem>
+                    <SelectItem value="operations_manager">Operations Manager</SelectItem>
+                    <SelectItem value="project_manager">Project Manager</SelectItem>
+                    <SelectItem value="product_manager">Product Manager</SelectItem>
+                    
+                    {/* Other Roles */}
+                    <SelectItem value="sales_representative">Sales Representative</SelectItem>
+                    <SelectItem value="account_executive">Account Executive</SelectItem>
+                    <SelectItem value="business_analyst">Business Analyst</SelectItem>
+                    <SelectItem value="consultant">Consultant</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -177,7 +243,7 @@ export default function SearchForm({ onSearch, isLoading }: SearchFormProps) {
                 <SlidersHorizontal className="mr-2 h-4 w-4" />
                 {showAdvancedFilters ? "Hide Filters" : "Advanced Filters"}
               </Button>
-              <Button type="submit" disabled={isLoading}>
+              <Button type="submit" disabled={isLoading} className="bg-primary hover:bg-primary/90">
                 {isLoading ? (
                   <>
                     <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -189,7 +255,7 @@ export default function SearchForm({ onSearch, isLoading }: SearchFormProps) {
                 ) : (
                   <>
                     <Search className="mr-2 h-4 w-4" />
-                    Find Leads
+                    Find Industry Leads
                   </>
                 )}
               </Button>
