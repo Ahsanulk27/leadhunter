@@ -8,6 +8,7 @@ import { b2cSearchController } from '../controllers/b2c-search-controller';
 import { v4 as uuidv4 } from 'uuid';
 import { SearchParams } from '../models/business-data';
 import { batchScraper } from '../api/batch-scraper';
+// @ts-ignore - XLSX module types are not required for functionality
 import * as XLSX from 'xlsx';
 
 export async function registerB2CRoutes(app: Express) {

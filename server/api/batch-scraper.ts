@@ -8,6 +8,7 @@ import { generateExecutionId } from './scraper-utils';
 import { BusinessData, ScrapingResult } from '../models/business-data';
 import * as fs from 'fs';
 import * as path from 'path';
+// @ts-ignore - XLSX module types are not required for functionality
 import * as XLSX from 'xlsx';
 
 interface BatchScraperOptions {
@@ -109,7 +110,8 @@ export class BatchScraper {
           
           const scrapingResult: ScrapingResult = {
             ...result,
-            businesses: filteredBusinesses
+            businesses: filteredBusinesses,
+            query: service // Add the query property from the service
           };
           
           // Export to Excel

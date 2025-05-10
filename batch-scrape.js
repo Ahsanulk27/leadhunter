@@ -10,7 +10,7 @@
  * 3. Results will be saved to the batch_results folder
  */
 
-const axios = require('axios');
+import axios from 'axios';
 
 // Configuration
 const API_URL = 'http://localhost:5000/api/b2c/batch';
