@@ -8,6 +8,7 @@ import LeadFinder from "@/pages/lead-finder";
 import MyLeads from "@/pages/my-leads";
 import SearchHistory from "@/pages/search-history";
 import SettingsPage from "@/pages/settings";
+import BulkLeads from "./pages/BulkLeads";
 import Layout from "@/components/layout";
 
 function Router() {
@@ -17,6 +18,7 @@ function Router() {
         <Route path="/" component={LeadFinder} />
         <Route path="/my-leads" component={MyLeads} />
         <Route path="/search-history" component={SearchHistory} />
+        <Route path="/bulk-leads" component={BulkLeads} />
         
         {/* These routes are placeholders for future implementation */}
         <Route path="/analytics">

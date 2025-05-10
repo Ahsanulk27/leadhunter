@@ -11,6 +11,8 @@ import { SearchParams } from './models/business-data';
 import { setupVite, serveStatic, log } from './vite';
 import http from 'http';
 import { registerRoutes } from './routes';
+import { registerBulkLeadRoutes } from './routes/bulk-leads';
+import { GooglePlacesService } from './api/google-places-service';
 
 // Load environment variables
 dotenv.config();
@@ -103,8 +105,14 @@ async function startServer(app: Express) {
     // Create HTTP server
     const server = http.createServer(app);
     
-    // Register API routes first
+    // Create Google Places service for bulk lead generation
+    const googlePlacesService = new GooglePlacesService();
+    
+    // Register standard API routes
     await registerRoutes(app);
+    
+    // Register bulk lead generation routes
+    registerBulkLeadRoutes(app, googlePlacesService);
     
     // Clean up routes to avoid conflicts
     if (app._router && app._router.stack) {

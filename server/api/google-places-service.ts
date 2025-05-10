@@ -120,21 +120,30 @@ export class GooglePlacesService {
   
   /**
    * Search for businesses using Google Places API
+   * @param params Search parameters object or query string
+   * @param locationStr Optional location string (used if params is a string)
+   * @param maxResultsNum Optional maximum results (used if params is a string)
    */
-  async searchBusinesses(query: string, location?: string, maxResults: number = 100): Promise<{
-    businesses: BusinessData[];
-    sources: string[];
-    meta?: {
-      totalResultsFound: number;
-      totalProcessedBusinesses: number;
-      totalContactsGenerated: number;
-      pagesRetrieved: number;
-    };
-    error?: {
-      code: string;
-      message: string;
-    };
-  }> {
+  async searchBusinesses(
+    params: string | { query?: string; location?: string; limit?: number; industry?: string; }, 
+    locationStr?: string, 
+    maxResultsNum: number = 100
+  ): Promise<ScrapingResult> {
+    // Handle both string and object parameters
+    let query: string;
+    let location: string | undefined;
+    let maxResults: number;
+    
+    if (typeof params === 'string') {
+      query = params;
+      location = locationStr;
+      maxResults = maxResultsNum;
+    } else {
+      query = params.query || '';
+      location = params.location;
+      maxResults = params.limit || maxResultsNum;
+    }
+    
     console.log(`🔍 GooglePlacesService: Searching for '${query}' in ${location || 'any location'}, max results: ${maxResults}`);
     
     if (!this.apiKey) {

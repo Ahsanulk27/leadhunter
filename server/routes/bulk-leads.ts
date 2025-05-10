@@ -5,15 +5,15 @@
  * across multiple geographic areas in a single request.
  */
 
-import { Request, Response } from 'express';
-import { Express } from 'express';
+import { Express, Request, Response } from 'express';
 import { GooglePlacesService } from '../api/google-places-service';
 import { ScrapingResult, BusinessData } from '../models/business-data';
+import { bulkLeadService } from '../api/bulk-lead-service';
 
-// Define list of major cities/areas to search in
-const MAJOR_US_AREAS = [
-  'los_angeles',
+// Available locations for bulk lead generation
+const AVAILABLE_LOCATIONS = [
   'new_york',
+  'los_angeles',
   'chicago',
   'houston',
   'phoenix',
@@ -21,45 +21,55 @@ const MAJOR_US_AREAS = [
   'san_antonio',
   'san_diego',
   'dallas',
-  'austin',
   'san_jose',
+  'austin',
   'san_francisco',
-  'boston',
-  'denver',
   'seattle',
-  'miami',
+  'boston',
   'atlanta',
-  'portland',
-  'detroit',
-  'tampa'
+  'miami',
+  'denver',
+  'las_vegas'
 ];
 
-// Common business categories/industries for reference
-const COMMON_INDUSTRIES = [
-  // Real Estate & Property
-  'property_management', 'real_estate', 'apartment_complexes', 'rental_agency',
-  // Food & Hospitality
-  'restaurants', 'cafes', 'bars', 'hotels', 'catering',
-  // Health & Medical
-  'doctors', 'dentists', 'chiropractors', 'physical_therapy', 'hospitals', 'clinics',
-  // Services
-  'accounting', 'legal_services', 'marketing_agencies', 'consulting_firms', 'cleaning_services',
-  // Retail
-  'clothing_stores', 'furniture_stores', 'electronics_stores', 'grocery_stores',
-  // Auto
-  'car_dealerships', 'auto_repair', 'auto_parts',
-  // Construction & Home
-  'contractors', 'plumbers', 'electricians', 'hvac', 'landscaping',
-  // Technology
-  'software_companies', 'it_services', 'web_development', 'tech_startups',
-  // Finance
-  'banks', 'credit_unions', 'financial_advisors', 'insurance_agencies',
-  // Education
-  'schools', 'universities', 'tutoring_services', 'training_centers'
+// Suggested industries for bulk lead generation
+const SUGGESTED_INDUSTRIES = [
+  'restaurants',
+  'hotels',
+  'retail_stores',
+  'healthcare_providers',
+  'law_firms',
+  'financial_services',
+  'real_estate_agencies',
+  'construction_companies',
+  'technology_companies',
+  'marketing_agencies',
+  'education_providers',
+  'automotive_businesses',
+  'manufacturing_companies'
 ];
 
-// Support any industry the user provides
-const SUPPORTED_INDUSTRIES = COMMON_INDUSTRIES;
+// Map location codes to searchable location strings
+const LOCATION_MAP: Record<string, string> = {
+  'new_york': 'New York, NY',
+  'los_angeles': 'Los Angeles, CA',
+  'chicago': 'Chicago, IL',
+  'houston': 'Houston, TX',
+  'phoenix': 'Phoenix, AZ',
+  'philadelphia': 'Philadelphia, PA',
+  'san_antonio': 'San Antonio, TX',
+  'san_diego': 'San Diego, CA',
+  'dallas': 'Dallas, TX',
+  'san_jose': 'San Jose, CA',
+  'austin': 'Austin, TX',
+  'san_francisco': 'San Francisco, CA',
+  'seattle': 'Seattle, WA',
+  'boston': 'Boston, MA',
+  'atlanta': 'Atlanta, GA',
+  'miami': 'Miami, FL',
+  'denver': 'Denver, CO',
+  'las_vegas': 'Las Vegas, NV'
+};
 
 /**
  * Register bulk lead generation routes
@@ -70,111 +80,74 @@ export function registerBulkLeadRoutes(app: Express, googlePlacesService: Google
    */
   app.post('/api/bulk-leads', async (req: Request, res: Response) => {
     try {
-      const { 
-        industry = 'property_management',
-        locations = [],
-        maxPerLocation = 20,
-        onlyDecisionMakers = true 
-      } = req.body;
+      const { industry, locations, maxPerLocation = 25 } = req.body;
       
-      // All industries are supported now - just provide suggestions if empty
-      const searchIndustry = industry || 'property_management'; // default if not provided
-      
-      // Use provided locations or default to all major US areas
-      const areasToSearch = locations && locations.length > 0 
-        ? locations 
-        : MAJOR_US_AREAS;
-      
-      // Limit the number of areas to prevent API overload
-      const limitedAreas = areasToSearch.slice(0, 10);
-      
-      // Log the start of bulk lead generation
-      console.log(`📍 Starting bulk lead generation for ${searchIndustry} in ${limitedAreas.length} locations`);
-      
-      // Track results for all areas
-      const allResults: {
-        location: string;
-        data: ScrapingResult;
-      }[] = [];
-      
-      // Track all businesses to prevent duplicates across locations
-      const processedBusinessNames = new Set<string>();
-      const processedPhoneNumbers = new Set<string>();
-      const processedWebsites = new Set<string>();
-      
-      // Process each location
-      for (const location of limitedAreas) {
-        console.log(`📍 Processing ${searchIndustry} businesses in ${location}`);
-        
-        // Search for businesses in this location
-        const results = await googlePlacesService.searchBusinesses(
-          searchIndustry, 
-          location, 
-          maxPerLocation
-        );
-        
-        // Filter out businesses that were already found in other locations
-        const uniqueBusinesses = results.businesses.filter(business => {
-          // Normalize business name to better identify duplicates
-          const normalizedName = business.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-          
-          // Check if we've seen this business before
-          if (
-            processedBusinessNames.has(normalizedName) ||
-            (business.phoneNumber && processedPhoneNumbers.has(business.phoneNumber)) ||
-            (business.website && processedWebsites.has(business.website))
-          ) {
-            return false;
-          }
-          
-          // Track this business to avoid duplicates later
-          processedBusinessNames.add(normalizedName);
-          if (business.phoneNumber) processedPhoneNumbers.add(business.phoneNumber);
-          if (business.website) processedWebsites.add(business.website);
-          
-          return true;
-        });
-        
-        console.log(`📍 Found ${uniqueBusinesses.length} unique ${industry} businesses in ${location}`);
-        
-        // Store results for this location
-        allResults.push({
-          location,
-          data: {
-            success: true,
-            businesses: uniqueBusinesses,
-            meta: results.meta
-          }
+      if (!industry) {
+        return res.status(400).json({
+          success: false,
+          message: 'Industry is required'
         });
       }
       
-      // Combine all businesses from all locations
-      const allBusinesses = allResults.flatMap(result => result.data.businesses);
+      // Determine which locations to search
+      const locationsToSearch = locations && locations.length > 0
+        ? locations.filter((loc: string) => AVAILABLE_LOCATIONS.includes(loc))
+        : AVAILABLE_LOCATIONS;
       
-      // Count total contacts across all businesses
-      const totalContacts = allBusinesses.reduce((sum, business) => 
-        sum + (business.contacts?.length || 0), 0);
+      console.log(`📊 Bulk Lead Generation: Searching for "${industry}" in ${locationsToSearch.length} locations`);
       
-      console.log(`📍 Bulk lead generation complete. Found ${allBusinesses.length} unique businesses with ${totalContacts} contacts`);
+      // Process each location and collect results
+      const locationResults = [];
+      const allBusinesses: BusinessData[] = [];
+      let totalContacts = 0;
+      
+      for (const locationCode of locationsToSearch) {
+        const locationName = LOCATION_MAP[locationCode] || locationCode.replace(/_/g, ' ');
+        
+        console.log(`📍 Processing location: ${locationName}`);
+        
+        // Search for businesses in this location
+        const data: ScrapingResult = await googlePlacesService.searchBusinesses({
+          query: industry,
+          location: locationName,
+          limit: maxPerLocation
+        });
+        
+        // Count contacts
+        let locationContactCount = 0;
+        data.businesses.forEach(business => {
+          if (business.contacts) {
+            locationContactCount += business.contacts.length;
+            totalContacts += business.contacts.length;
+          }
+        });
+        
+        // Store location results
+        locationResults.push({
+          location: locationCode,
+          businessCount: data.businesses.length,
+          contactCount: locationContactCount
+        });
+        
+        // Add businesses to the combined list
+        allBusinesses.push(...data.businesses);
+      }
       
       // Return the combined results
       return res.json({
         success: true,
-        totalLocations: limitedAreas.length,
+        totalLocations: locationsToSearch.length,
         totalBusinesses: allBusinesses.length,
         totalContacts,
-        requestedIndustry: searchIndustry,
-        locationResults: allResults.map(result => ({
-          location: result.location,
-          businessCount: result.data.businesses.length
-        })),
+        locationResults,
         businesses: allBusinesses
       });
     } catch (error) {
-      console.error('❌ Error in bulk lead generation:', error);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Error generating bulk leads' 
+      console.error('Error in bulk lead generation:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to generate leads',
+        error: (error as Error).message
       });
     }
   });
@@ -183,9 +156,9 @@ export function registerBulkLeadRoutes(app: Express, googlePlacesService: Google
    * Get available locations for bulk lead generation
    */
   app.get('/api/bulk-leads/locations', (req: Request, res: Response) => {
-    return res.json({
+    res.json({
       success: true,
-      locations: MAJOR_US_AREAS
+      locations: AVAILABLE_LOCATIONS
     });
   });
   
@@ -193,10 +166,9 @@ export function registerBulkLeadRoutes(app: Express, googlePlacesService: Google
    * Get suggested industries for bulk lead generation
    */
   app.get('/api/bulk-leads/industries', (req: Request, res: Response) => {
-    return res.json({
+    res.json({
       success: true,
-      message: "These are suggested industries, but you can use any industry or business type",
-      industries: COMMON_INDUSTRIES
+      industries: SUGGESTED_INDUSTRIES
     });
   });
   
@@ -206,107 +178,90 @@ export function registerBulkLeadRoutes(app: Express, googlePlacesService: Google
   app.post('/api/bulk-leads/custom', async (req: Request, res: Response) => {
     try {
       const { 
-        query, // Can be any business type, service, etc.
-        locations = [],
-        maxPerLocation = 20,
-        onlyDecisionMakers = true 
+        query, 
+        locations, 
+        maxPerLocation = 25,
+        onlyDecisionMakers = true
       } = req.body;
       
-      if (!query || typeof query !== 'string' || query.trim().length === 0) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Query is required. Specify any business type, service, or industry.' 
+      if (!query) {
+        return res.status(400).json({
+          success: false,
+          message: 'Search query is required'
         });
       }
       
-      // Use provided locations or default to major US areas
-      const areasToSearch = locations && locations.length > 0 
-        ? locations 
-        : MAJOR_US_AREAS.slice(0, 5); // Limit to 5 locations by default for custom search
+      // Determine which locations to search
+      const locationsToSearch = locations && locations.length > 0
+        ? locations.filter((loc: string) => AVAILABLE_LOCATIONS.includes(loc))
+        : AVAILABLE_LOCATIONS;
       
-      console.log(`📍 Starting custom bulk lead generation for "${query}" in ${areasToSearch.length} locations`);
+      console.log(`📊 Bulk Lead Generation: Searching for "${query}" in ${locationsToSearch.length} locations`);
       
-      // Track results for all areas
-      const allResults: {
-        location: string;
-        data: ScrapingResult;
-      }[] = [];
+      // Process each location and collect results
+      const locationResults = [];
+      const allBusinesses: BusinessData[] = [];
+      let totalContacts = 0;
       
-      // Track all businesses to prevent duplicates across locations
-      const processedBusinessNames = new Set<string>();
-      const processedPhoneNumbers = new Set<string>();
-      
-      // Process each location
-      for (const location of areasToSearch) {
-        console.log(`📍 Processing "${query}" in ${location}`);
+      for (const locationCode of locationsToSearch) {
+        const locationName = LOCATION_MAP[locationCode] || locationCode.replace(/_/g, ' ');
         
-        // Search for businesses in this location with the custom query
-        const results = await googlePlacesService.searchBusinesses(
-          query, 
-          location, 
-          maxPerLocation
-        );
+        console.log(`📍 Processing location: ${locationName}`);
         
-        // Filter out businesses that were already found in other locations
-        const uniqueBusinesses = results.businesses.filter(business => {
-          // Normalize business name to better identify duplicates
-          const normalizedName = business.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-          
-          // Check if we've seen this business before
-          if (
-            processedBusinessNames.has(normalizedName) ||
-            (business.phoneNumber && processedPhoneNumbers.has(business.phoneNumber))
-          ) {
-            return false;
-          }
-          
-          // Track this business to avoid duplicates later
-          processedBusinessNames.add(normalizedName);
-          if (business.phoneNumber) processedPhoneNumbers.add(business.phoneNumber);
-          
-          return true;
+        // Search for businesses in this location
+        const data: ScrapingResult = await googlePlacesService.searchBusinesses({
+          query,
+          location: locationName,
+          limit: maxPerLocation
         });
         
-        console.log(`📍 Found ${uniqueBusinesses.length} unique "${query}" businesses in ${location}`);
+        // Filter contacts if onlyDecisionMakers is true
+        if (onlyDecisionMakers) {
+          data.businesses.forEach(business => {
+            if (business.contacts && business.contacts.length > 0) {
+              // Keep only decision makers
+              business.contacts = business.contacts.filter(contact => 
+                contact.isDecisionMaker === true || contact.isPrimary === true
+              );
+            }
+          });
+        }
         
-        // Store results for this location
-        allResults.push({
-          location,
-          data: {
-            success: true,
-            businesses: uniqueBusinesses,
-            meta: results.meta
+        // Count contacts
+        let locationContactCount = 0;
+        data.businesses.forEach(business => {
+          if (business.contacts) {
+            locationContactCount += business.contacts.length;
+            totalContacts += business.contacts.length;
           }
         });
+        
+        // Store location results
+        locationResults.push({
+          location: locationCode,
+          businessCount: data.businesses.length,
+          contactCount: locationContactCount
+        });
+        
+        // Add businesses to the combined list
+        allBusinesses.push(...data.businesses);
       }
-      
-      // Combine all businesses from all locations
-      const allBusinesses = allResults.flatMap(result => result.data.businesses);
-      
-      // Count total contacts across all businesses
-      const totalContacts = allBusinesses.reduce((sum, business) => 
-        sum + (business.contacts?.length || 0), 0);
-      
-      console.log(`📍 Custom bulk lead generation complete. Found ${allBusinesses.length} unique businesses with ${totalContacts} contacts`);
       
       // Return the combined results
       return res.json({
         success: true,
-        totalLocations: areasToSearch.length,
+        totalLocations: locationsToSearch.length,
         totalBusinesses: allBusinesses.length,
         totalContacts,
-        requestedQuery: query,
-        locationResults: allResults.map(result => ({
-          location: result.location,
-          businessCount: result.data.businesses.length
-        })),
+        locationResults,
         businesses: allBusinesses
       });
     } catch (error) {
-      console.error('❌ Error in custom bulk lead generation:', error);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Error generating custom bulk leads' 
+      console.error('Error in custom bulk lead generation:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to generate leads',
+        error: (error as Error).message
       });
     }
   });

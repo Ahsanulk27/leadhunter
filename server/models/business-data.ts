@@ -71,4 +71,6 @@ export interface SearchParams {
   industry?: string;
   location?: string;
   position?: string;
+  page?: number;
+  limit?: number;
 }
