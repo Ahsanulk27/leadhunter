@@ -318,8 +318,8 @@ export function processSearchResults(results: BusinessData[]): {
   };
 }
 
-// Execute if this script is run directly
-if (require.main === module) {
+// Function to run the script directly (not used in imports)
+export function runAsScript(): void {
   console.log('⚙️ Running lead uniqueness improvement script');
   console.log('This script should be imported and used by the API service.');
   console.log('Sample usage:');

@@ -38,6 +38,26 @@ export interface ScrapingResult {
   businesses: BusinessData[];
   message?: string;
   errorCode?: string;
+  sources?: string[];
+  meta?: {
+    totalResultsFound: number;
+    totalProcessedBusinesses: number;
+    totalContactsGenerated: number;
+    pagesRetrieved: number;
+    totalCount?: number;
+    quotaStatus?: string;
+  };
+}
+
+export interface ErrorResponse {
+  code: string;
+  message: string;
+}
+
+export interface SheetExportResult {
+  success: boolean;
+  message: string;
+  url: string;
 }
 
 export interface BusinessLocation {

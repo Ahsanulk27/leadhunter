@@ -260,7 +260,7 @@ export class GooglePlacesService {
       console.log(`✅ GooglePlacesService: Found ${allResults.length} total places across ${pageCount} pages`);
       
       // Process the results
-      const businesses: BusinessData[] = [];
+      let rawBusinesses: BusinessData[] = [];
       // Track place IDs to avoid duplicates
       const processedPlaceIds = new Set<string>();
       
@@ -323,7 +323,7 @@ export class GooglePlacesService {
             contacts: businessContacts
           };
           
-          businesses.push(business);
+          rawBusinesses.push(business);
         } catch (error) {
           console.error(`❌ GooglePlacesService: Error processing place:`, error);
         }
@@ -338,20 +338,24 @@ export class GooglePlacesService {
         console.warn(`⚠️ GooglePlacesService: ${businessesWithNoContactMethods.length} businesses had no contact methods (phone/website)`);
       }
       
+      // Final processed businesses variable - will be updated with optimized data if available
+      let finalBusinesses = rawBusinesses;
+      
       // Process results with the lead uniqueness improvement script
       try {
-        // Import the lead uniqueness module
-        const { processSearchResults } = require('../scripts/improve-lead-uniqueness');
+        // Import the lead uniqueness module - use dynamic import for ES modules
+        const improveLeadUniqueness = await import('../scripts/improve-lead-uniqueness.js');
+        const { processSearchResults } = improveLeadUniqueness;
         
         // Process the results to improve uniqueness
         const {
           businesses: optimizedBusinesses,
           skippedDuplicates, 
           stats
-        } = processSearchResults(businesses);
+        } = processSearchResults(rawBusinesses);
         
         // Use the optimized businesses instead of the original
-        let processedBusinesses = optimizedBusinesses;
+        finalBusinesses = optimizedBusinesses;
         
         // Log stats about uniqueness optimization
         console.log(`📊 GooglePlacesService: Lead optimization - ${stats.duplicatesSkipped} duplicate businesses removed`);
@@ -365,17 +369,14 @@ export class GooglePlacesService {
             console.log(`  - ${business.name} (${business.address})`);
           });
         }
-        
-        // Replace the original businesses array with the optimized one
-        businesses = processedBusinesses;
       } catch (error) {
         console.error(`❌ GooglePlacesService: Error optimizing leads for uniqueness:`, error);
         // Continue with unoptimized results if the optimization fails
       }
       
       // Log the final business count vs. initial results count
-      const totalProcessedBusinesses = businesses.length;
-      const totalContactsGenerated = businesses.reduce((sum, business) => sum + (business.contacts?.length || 0), 0);
+      const totalProcessedBusinesses = finalBusinesses.length;
+      const totalContactsGenerated = finalBusinesses.reduce((sum: number, business: BusinessData) => sum + (business.contacts?.length || 0), 0);
       
       console.log(`📊 GooglePlacesService: Successfully processed ${totalProcessedBusinesses}/${totalResultsFound} businesses`);
       console.log(`📊 GooglePlacesService: Generated a total of ${totalContactsGenerated} contacts`);
@@ -396,7 +397,7 @@ export class GooglePlacesService {
       };
       
       return { 
-        businesses, 
+        businesses: finalBusinesses, 
         sources: ['google-places-api'],
         meta: metaData
       };
