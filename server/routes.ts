@@ -42,34 +42,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       `);
       
       // Build the search query for history recording
-      const searchQuery = company || 
-                        (industry && location ? `${industry} in ${location}` : 
-                         (industry || location || 'general business search'));
+      const historyQuery = company || 
+                     (industry && location ? `${industry} in ${location}` : 
+                      (industry || location || 'general business search'));
 
       // Record search in history
       const searchHistoryData: InsertSearchHistory = {
-        query: searchQuery,
+        query: historyQuery,
         resultsCount: 0,
       };
       
       await storage.createSearchHistory(searchHistoryData);
       console.log("📍 Search recorded in history");
 
-      // Import our search controller which coordinates all data sources
-      console.log("📍 Importing and using search controller...");
-      const { searchController } = await import('./controllers/search-controller');
+      // Build search query for Google Places API
+      console.log("📍 Searching for REAL business data using Google Places API...");
       
-      console.log("📍 Searching for REAL business data from multiple sources...");
+      // Create the optimal search query for the API
+      let apiQuery = "";
+      if (company) {
+        apiQuery = company;
+        if (location) apiQuery += ` ${location}`;
+      } else if (industry) {
+        apiQuery = industry;
+        if (location) apiQuery += ` ${location}`;
+      } else if (location) {
+        apiQuery = location;
+      } else {
+        apiQuery = "business";
+      }
       
-      // Search across all real data sources
-      const scrapedData = await searchController.searchBusinessData({
-        company,
-        industry, 
-        location,
-        position,
-        size,
-        prioritizeDecisionMakers
-      });
+      // Use our real data fetch function
+      const scrapedData = await fetchRealBusinessData(apiQuery, location);
       
       console.log("📍 Search completed, results:", scrapedData ? "Data found" : "No data found");
       
@@ -570,32 +574,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         error_details: []
       };
       
-      // Import our search controller which coordinates all data sources
-      const { searchController } = await import('./controllers/search-controller');
+      console.log(`🔍 [${executionId}] Executing real business search with Google Places API`);
       
-      // Determine if the query is likely a company name or an industry
-      // Heuristic: Company names typically have capitalized words or special characters
-      const isCompanyName = /[A-Z]/.test(query) || 
-                           /[&\-',.]/.test(query) || 
-                           query.split(' ').length > 1;
+      // Search with Google Places API
+      const { googlePlacesService } = await import('./api/google-places-service');
+      const result = await googlePlacesService.searchBusinesses(query, location);
       
-      console.log(`🔍 [${executionId}] Query '${query}' interpreted as: ${isCompanyName ? 'Company Name' : 'Industry'}`);
-      
-      // Set up search params based on our determination
-      const searchParams = {
-        company: isCompanyName ? query : undefined,
-        industry: !isCompanyName ? query : undefined,
-        location: location,
-        page: page,
-        limit: limit,
-        executionId: executionId,
-        executionLog: executionLog
+      // Format the results in the expected ScrapingResult format
+      const scrapingResult: ScrapingResult = {
+        businesses: result.businesses,
+        meta: {
+          sources: result.sources,
+          query: query,
+          location: location,
+          timestamp: new Date().toISOString(),
+          execution_id: executionId,
+          total_count: result.businesses.length,
+          page: page,
+          limit: limit,
+          total_pages: Math.ceil(result.businesses.length / limit)
+        }
       };
       
-      console.log(`🔍 [${executionId}] Executing real scraping with params:`, searchParams);
-      
-      // Search across all real data sources
-      const scrapingResult = await searchController.searchBusinessData(searchParams);
+      // Add these properties to help with type checking in the rest of the code
+      (scrapingResult as any).totalCount = result.businesses.length;
+      (scrapingResult as any).sources = result.sources;
       
       // Calculate execution time
       const executionTime = Date.now() - startTime;
@@ -635,19 +638,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         execution_time_ms: executionTime,
         data: scrapingResult.businesses.map((business: BusinessData) => ({
           business_name: business.name,
-          industry: business.industry,
-          location: business.location,
-          address: business.address,
-          phone: business.phone,
-          website: business.website,
-          email: business.email,
-          contacts: business.contacts.map((contact: any) => ({
+          category: business.category || "",
+          address: business.address || "",
+          phone: business.phoneNumber || "",
+          website: business.website || "",
+          email: business.email || "",
+          imageUrl: business.imageUrl || "",
+          description: business.description || "",
+          rating: business.rating || 0,
+          reviewCount: business.reviewCount || 0,
+          source: business.source,
+          sourceUrl: business.sourceUrl,
+          contacts: business.contacts?.map((contact: Contact) => ({
             name: contact.name,
-            position: contact.position,
-            email: contact.email,
-            phone: contact.companyPhone || contact.personalPhone,
-            is_decision_maker: contact.isDecisionMaker
-          }))
+            position: contact.position || "",
+            email: contact.email || "",
+            phone: contact.phoneNumber || "",
+            is_decision_maker: contact.isDecisionMaker || false
+          })) || []
         })),
         metadata: {
           page: page,
@@ -695,18 +703,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         execution_time_ms: executionTime,
         data: scrapingResult.businesses.map((business: BusinessData) => ({
           business_name: business.name,
-          industry: business.industry,
-          location: business.location,
-          address: business.address,
-          phone: business.phoneNumber,
-          website: business.website,
-          contacts: business.contacts.map((contact: any) => ({
+          category: business.category || "",
+          address: business.address || "",
+          phone: business.phoneNumber || "",
+          website: business.website || "",
+          email: business.email || "",
+          imageUrl: business.imageUrl || "",
+          description: business.description || "",
+          rating: business.rating || 0,
+          reviewCount: business.reviewCount || 0,
+          source: business.source,
+          sourceUrl: business.sourceUrl,
+          contacts: business.contacts?.map((contact: Contact) => ({
             name: contact.name,
-            position: contact.position,
-            email: contact.email,
-            phone: contact.phoneNumber,
-            is_decision_maker: contact.isDecisionMaker
-          }))
+            position: contact.position || "",
+            email: contact.email || "",
+            phone: contact.phoneNumber || "",
+            is_decision_maker: contact.isDecisionMaker || false
+          })) || []
         })),
         metadata: {
           page: page,
@@ -806,62 +820,40 @@ function calculateRelevanceScore(contact: {
   return score;
 }
 
-// High-performance bulk data scraping from multiple public sources
-async function simulateScraping(companyName: string, industry?: string, location?: string): Promise<any> {
-  // In a real implementation, this would use a combination of:
-  // 1. Parallel web scraping with Puppeteer/Cheerio from Google Business listings
-  // 2. LinkedIn company pages and profiles using API access
-  // 3. Business directories like Yellow Pages, Yelp, etc. via simultaneous requests
-  // 4. Company websites' "About" and "Team" pages with headless browser automation
-  // 5. Public API data from business registries with batch processing
-  // 6. Social media profiles with rate-limited API access
-  // 7. Industry-specific databases with bulk data access
-  // 8. Sales intelligence platforms via API integrations
+// Real business data scraping using Google Places API
+async function fetchRealBusinessData(query: string, location?: string): Promise<any> {
+  console.log(`Starting real business data search for: ${query}, location: ${location}`);
   
-  console.log(`Starting large-scale data scraping for industry: ${industry}, location: ${location}`);
+  // Import Google Places service
+  const { googlePlacesService } = await import('./api/google-places-service');
   
-  // Simulate high-speed data retrieval (reduced from 1500ms to 500ms)
-  await new Promise(resolve => setTimeout(resolve, 500));
+  // Search for businesses using Google Places API
+  const result = await googlePlacesService.searchBusinesses(query, location);
   
-  // Convert location code to actual location string if needed
-  const formattedLocation = location && location.includes('_') ? 
-                          getLocationFromCode(location) : location;
+  if (result.businesses.length === 0) {
+    console.log(`No real business data found for query: ${query}, location: ${location}`);
+    return null;
+  }
   
-  // Process industry code to determine which data generation function to use
-  const industryCategory = getIndustryCategory(industry);
+  console.log(`Found ${result.businesses.length} businesses for query: ${query}`);
   
-  // For parallel processing, we would launch concurrent scraping operations
-  // For simulation, we'll generate a larger set of company data with more contacts
-  const companyData = generateIndustrySpecificData(industryCategory, companyName, formattedLocation);
+  // Return the first business as the main result
+  const mainBusiness = result.businesses[0];
   
-  // BULK DATA ENHANCEMENT: Generate a very large set of contacts (250-500 contacts)
-  // In production, this would be from multiple data sources aggregated in parallel
-  const contactCount = 250 + Math.floor(Math.random() * 250); // 250-500 contacts
-  const additionalContacts = generateMoreContacts(industryCategory, companyName, contactCount);
-  
-  // Aggregate, deduplicate, and enrich contact data
-  const combinedContacts = [...companyData.contacts, ...additionalContacts];
-  
-  // Add data quality metrics that would come from a real scraping system
-  companyData.dataQuality = {
-    sourcesScraped: 12,
-    contactsFound: combinedContacts.length,
-    dataConfidenceScore: 85 + Math.floor(Math.random() * 15),
-    lastUpdated: new Date().toISOString(),
-    dataSourceBreakdown: {
-      googleBusiness: Math.floor(Math.random() * 20) + 10,
-      linkedin: Math.floor(Math.random() * 40) + 20,
-      companyWebsite: Math.floor(Math.random() * 30) + 20,
-      salesIntelligence: Math.floor(Math.random() * 20) + 10,
-      socialMedia: Math.floor(Math.random() * 15) + 5,
-    }
+  return {
+    name: mainBusiness.name,
+    industry: mainBusiness.category,
+    location: location || "",
+    address: mainBusiness.address,
+    phone: mainBusiness.phoneNumber,
+    website: mainBusiness.website,
+    email: "",
+    description: mainBusiness.description,
+    imageUrl: mainBusiness.imageUrl,
+    contacts: mainBusiness.contacts || [],
+    source: mainBusiness.source,
+    sourceUrl: mainBusiness.sourceUrl
   };
-  
-  // Use the filtered and sorted contacts in the final result
-  companyData.contacts = combinedContacts;
-  console.log(`Completed scraping ${combinedContacts.length} contacts for ${companyName}`);
-  
-  return companyData;
 }
 
 // Determine the category of industry from the industry code
