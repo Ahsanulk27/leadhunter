@@ -5,6 +5,7 @@ import SearchForm from "@/components/search-form";
 import SearchResults from "@/components/search-results";
 import SavedLeads from "@/components/saved-leads";
 import ExportModal from "@/components/export-modal";
+import SearchLoadingState from "@/components/search-loading-state";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -13,6 +14,10 @@ export default function LeadFinder() {
   const [searchResults, setSearchResults] = useState<any>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [searchParams, setSearchParams] = useState<{
+    industry?: string;
+    company?: string;
+  }>({});
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -87,6 +92,12 @@ export default function LeadFinder() {
 
   // Handle search form submission
   const handleSearch = (formData: any) => {
+    // Save the search parameters for the loading screen
+    setSearchParams({
+      industry: formData.industry || undefined,
+      company: formData.company || undefined
+    });
+    
     searchMutation.mutate(formData);
   };
 
@@ -105,7 +116,17 @@ export default function LeadFinder() {
       <div className="max-w-7xl mx-auto">
         <SearchForm onSearch={handleSearch} isLoading={isLoading} />
         
-        {searchError ? (
+        {isLoading && (
+          <div className="bg-white border border-gray-200 rounded-md shadow-sm mb-6">
+            <SearchLoadingState 
+              industry={searchParams.industry}
+              company={searchParams.company}
+              isVisible={isLoading}
+            />
+          </div>
+        )}
+        
+        {!isLoading && searchError ? (
           <div className="bg-red-50 border border-red-200 text-red-800 rounded-md p-4 mb-6">
             <div className="flex">
               <div className="flex-shrink-0">
@@ -128,10 +149,10 @@ export default function LeadFinder() {
               </div>
             </div>
           </div>
-        ) : searchResults && (
+        ) : !isLoading && searchResults && (
           <SearchResults 
             results={searchResults} 
-            isLoading={isLoading}
+            isLoading={false}
             onSaveLead={handleSaveLead}
             onExport={handleExport}
           />
