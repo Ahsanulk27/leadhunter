@@ -447,7 +447,7 @@ function generateMoreContacts(category: string, companyName: string, count: numb
   // Generate additional contacts based on industry category
   switch (category) {
     case 'real_estate':
-      return generateRealEstateContacts(count, companyName);
+      return generateBusinessContacts(count, companyName);
     case 'technology':
       return generateIndustryContacts(count, companyName, 'technology');
     case 'finance':
@@ -660,12 +660,14 @@ function generateBusinessContacts(count: number, companyName: string): any[] {
   
   // Business positions with different levels of seniority
   const businessPositions = [
-    "Broker/Owner", "Managing Broker", "Principal Broker", "Broker of Record", "CEO",
-    "VP of Sales", "VP of Property Management", "Director of Acquisitions", "Director of Leasing",
-    "Senior Real Estate Agent", "Real Estate Agent", "Realtor", "Commercial Broker",
-    "Property Manager", "Leasing Consultant", "Mortgage Broker", "Transaction Coordinator",
-    "Real Estate Developer", "Real Estate Investor", "Chief Investment Officer",
-    "Marketing Director", "Business Development Manager"
+    "CEO", "COO", "CFO", "CTO", "CIO", "CMO", "President", 
+    "Executive Director", "Managing Director", "General Manager",
+    "VP of Sales", "VP of Operations", "VP of Marketing", "VP of Finance", "VP of Technology",
+    "Director of Sales", "Director of Operations", "Director of Marketing", "Director of Finance",
+    "Director of IT", "Director of Procurement", "Director of Facilities Management",
+    "Senior Manager", "Operations Manager", "Sales Manager", "Marketing Manager", 
+    "Procurement Manager", "Facilities Manager", "Office Manager",
+    "Business Development Executive", "Account Executive", "Project Manager"
   ];
   
   // Domain for email
@@ -681,10 +683,10 @@ function generateBusinessContacts(count: number, companyName: string): any[] {
     // For the first contact or with 30% probability, make it a senior position
     let position;
     if (i === 0 || Math.random() < 0.3) {
-      position = realEstatePositions[Math.floor(Math.random() * 6)]; // Senior positions
+      position = businessPositions[Math.floor(Math.random() * 7)]; // Top executive positions (CEO, COO, etc.)
       hasDecisionMaker = true;
     } else {
-      position = realEstatePositions[Math.floor(Math.random() * realEstatePositions.length)];
+      position = businessPositions[Math.floor(Math.random() * businessPositions.length)];
     }
     
     // Generate email
@@ -695,8 +697,9 @@ function generateBusinessContacts(count: number, companyName: string): any[] {
     const phone = `(${areaCode}) 555-${Math.floor(1000 + Math.random() * 9000)}`;
     
     // Is this a decision-maker? (based on position being senior)
-    const isDecisionMaker = i === 0 || position.includes("Broker/Owner") || position.includes("Managing") || 
-                           position.includes("CEO") || position.includes("VP") || 
+    const isDecisionMaker = i === 0 || position.includes("CEO") || position.includes("COO") || 
+                           position.includes("CFO") || position.includes("CTO") || position.includes("CIO") ||
+                           position.includes("CMO") || position.includes("President") || position.includes("VP") || 
                            position.includes("Director") || position.includes("Chief");
     
     // Generate cell phone for decision makers
@@ -749,7 +752,7 @@ function generateBusinessContacts(count: number, companyName: string): any[] {
   
   // If no decision makers were created, ensure at least one
   if (!hasDecisionMaker && contacts.length > 0) {
-    contacts[0].position = realEstatePositions[Math.floor(Math.random() * 5)];
+    contacts[0].position = businessPositions[Math.floor(Math.random() * 7)];
   }
   
   return contacts;
