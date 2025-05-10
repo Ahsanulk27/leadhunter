@@ -7,6 +7,8 @@ import { Router, Request, Response, Express } from 'express';
 import { b2cSearchController } from '../controllers/b2c-search-controller';
 import { v4 as uuidv4 } from 'uuid';
 import { SearchParams } from '../models/business-data';
+import { batchScraper } from '../api/batch-scraper';
+import * as XLSX from 'xlsx';
 
 export async function registerB2CRoutes(app: Express) {
   const router = Router();
@@ -150,6 +152,52 @@ export async function registerB2CRoutes(app: Express) {
     } catch (error) {
       console.error('Error in B2C export endpoint:', error);
       res.status(500).json({ error: 'Failed to generate B2C export' });
+    }
+  });
+  
+  // Batch scraping endpoint
+  router.post('/batch', async (req: Request, res: Response) => {
+    try {
+      const { services, locations, options } = req.body;
+      
+      if (!services || !Array.isArray(services) || services.length === 0) {
+        return res.status(400).json({ error: 'Services array is required' });
+      }
+      
+      if (!locations || !Array.isArray(locations) || locations.length === 0) {
+        return res.status(400).json({ error: 'Locations array is required' });
+      }
+      
+      console.log(`🔍 Batch B2C Search Request: ${services.length} services across ${locations.length} locations`);
+      
+      // Start batch process asynchronously so we can return immediately
+      const batchPromise = batchScraper.runBatch(services, locations, options || {});
+      
+      // Return immediately with a job ID
+      const batchId = uuidv4();
+      res.json({
+        message: 'Batch search started',
+        batchId,
+        services,
+        locations,
+        totalJobs: services.length * locations.length,
+        estimatedTime: (services.length * locations.length * 30) + ' seconds' // Rough estimate
+      });
+      
+      // Process batch in the background
+      batchPromise
+        .then(results => {
+          console.log(`✅ Batch B2C Search completed: ${results.length} jobs processed`);
+        })
+        .catch(error => {
+          console.error(`❌ Batch B2C Search error: ${error.message}`);
+        });
+    } catch (error) {
+      console.error('Error in batch B2C search:', error);
+      res.status(500).json({ 
+        error: 'Failed to execute batch B2C search',
+        message: (error as Error).message
+      });
     }
   });
   
