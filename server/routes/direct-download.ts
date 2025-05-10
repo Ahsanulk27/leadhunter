@@ -57,9 +57,9 @@ export function registerDirectDownloadRoutes(app: Express) {
           const matchingSearch = allSearches
             .filter(search => search.searchTerm === searchTerm)
             .sort((a, b) => {
-              // Sort by creation date (newest first)
-              const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-              const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+              // Sort by search date (newest first)
+              const dateA = a.searchDate ? new Date(a.searchDate).getTime() : 0;
+              const dateB = b.searchDate ? new Date(b.searchDate).getTime() : 0;
               return dateB - dateA;
             })[0];
             

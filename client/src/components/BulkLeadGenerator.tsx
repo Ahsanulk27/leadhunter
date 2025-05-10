@@ -255,44 +255,76 @@ const BulkLeadGenerator: React.FC = () => {
       const filename = `nexlead_${sanitizedSearchTerm}_${timestamp}.csv`;
       
       // For iPhone, we'll use a special approach to trigger download directly to Files app
-      // First, post the data to our server where it can be temporarily stored
-      const dataResponse = await fetch('/api/bulk-leads/export-csv', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      // For iOS devices, we'll use the direct download through the bulk-leads endpoint
+      // This approach avoids any cross-tab issues by handling everything in one request
+
+      // Determine if we're on iOS
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      
+      if (isIOS) {
+        console.log("iOS device detected, using direct download approach");
+        
+        // For iOS, we'll use a direct window.location.href approach which works better
+        const exportUrl = `/api/bulk-leads/export-csv?filename=${encodeURIComponent(filename)}`;
+        
+        // Use form submission for POST data with file download
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = exportUrl;
+        form.target = '_blank'; // Open in new tab
+        
+        // Add hidden fields for data
+        const dataField = document.createElement('input');
+        dataField.type = 'hidden';
+        dataField.name = 'data';
+        dataField.value = JSON.stringify({
           searchTerm,
           locations: selectedLocations,
           businesses: results.businesses
-        })
-      });
-      
-      if (!dataResponse.ok) {
-        throw new Error('Failed to prepare data for download');
-      }
-      
-      // Now create a direct download URL to our server endpoint
-      const downloadUrl = `/api/direct-download/csv?filename=${encodeURIComponent(filename)}&searchTerm=${encodeURIComponent(searchTerm)}`;
-      
-      // Create an invisible iframe to trigger the download without navigating away
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      document.body.appendChild(iframe);
-      
-      // For iOS Safari, we'll use a direct approach
-      if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) {
-        // For iOS, window.open works better than iframe
-        window.open(downloadUrl, '_blank');
+        });
+        
+        form.appendChild(dataField);
+        document.body.appendChild(form);
+        form.submit();
+        
+        // Clean up the form
+        setTimeout(() => {
+          document.body.removeChild(form);
+        }, 1000);
       } else {
-        // For other browsers, use the iframe approach
-        iframe.src = downloadUrl;
+        // For non-iOS devices, use the regular fetch approach
+        const dataResponse = await fetch('/api/bulk-leads/export-csv', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            searchTerm,
+            locations: selectedLocations,
+            businesses: results.businesses
+          })
+        });
+        
+        if (!dataResponse.ok) {
+          throw new Error('Failed to prepare data for download');
+        }
+        
+        // For non-iOS, we can use a blob approach which is more reliable
+        const blob = await dataResponse.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        
+        // Clean up
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        }, 1000);
       }
-      
-      // Remove the iframe after download starts (after a delay)
-      setTimeout(() => {
-        document.body.removeChild(iframe);
-      }, 5000); // 5 second timeout
       
       // Reset the exporting state and show success message
       // Use a slightly longer timeout since we're redirecting

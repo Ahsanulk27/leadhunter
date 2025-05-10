@@ -342,7 +342,30 @@ export function registerBulkLeadRoutes(app: Express, googlePlacesService: Google
   // Direct CSV download endpoint for mobile devices
   router.post('/export-csv', async (req: Request, res: Response) => {
     try {
-      const { searchTerm, locations, businesses } = req.body;
+      // Handle both JSON body and form data for iOS compatibility
+      let searchTerm, locations, businesses;
+      
+      if (req.body.data && typeof req.body.data === 'string') {
+        // This is from the form submission for iOS
+        try {
+          console.log("Parsing form data for iOS");
+          const formData = JSON.parse(req.body.data);
+          searchTerm = formData.searchTerm;
+          locations = formData.locations;
+          businesses = formData.businesses;
+        } catch (parseError) {
+          console.error("Error parsing form data:", parseError);
+          return res.status(400).json({ error: 'Invalid form data format' });
+        }
+      } else {
+        // This is from the direct JSON POST
+        searchTerm = req.body.searchTerm;
+        locations = req.body.locations;
+        businesses = req.body.businesses;
+      }
+      
+      // Add filename from query params if available (iOS form submission)
+      const filenameFromQuery = req.query.filename as string;
       
       if (!businesses || !Array.isArray(businesses) || businesses.length === 0) {
         return res.status(400).json({ error: 'No businesses data provided for export' });
@@ -408,7 +431,17 @@ export function registerBulkLeadRoutes(app: Express, googlePlacesService: Google
       
       // Set response headers for file download - mobile friendly
       res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename=nexlead_${(searchTerm || 'leads').replace(/\s+/g, '_')}_${new Date().toISOString().replace(/[:.]/g, '-')}.csv`);
+      
+      // Use the filename from query params if available (for iOS), otherwise generate one
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const sanitizedSearchTerm = (searchTerm || 'leads').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const filename = filenameFromQuery || `nexlead_${sanitizedSearchTerm}_${timestamp}.csv`;
+      
+      // Set special headers for iOS Safari to ensure file download works
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       
       // Send CSV content
       res.send(csvContent);
