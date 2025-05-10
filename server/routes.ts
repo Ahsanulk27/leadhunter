@@ -493,6 +493,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Google Places API status endpoint to track quota usage
+  app.get("/api/places-status", async (req: Request, res: Response) => {
+    try {
+      console.log(`🔍 Checking Google Places API quota status`);
+      
+      // Import Google Places service
+      const { googlePlacesService } = await import('./api/google-places-service');
+      
+      // Get API quota usage
+      const quotaStatus = googlePlacesService.getQuotaUsage();
+      
+      return res.status(200).json({
+        ...quotaStatus,
+        has_key: !!process.env.GOOGLE_API_KEY,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error(`❌ Error checking Google Places API status:`, error);
+      return res.status(500).json({ 
+        error: "Failed to check Google Places API status", 
+        message: (error as Error).message 
+      });
+    }
+  });
+  
   // Create a new Google Sheet for exports
   app.post("/api/create-sheet", async (req: Request, res: Response) => {
     try {

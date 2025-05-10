@@ -6,6 +6,7 @@ import SearchResults from "@/components/search-results";
 import SavedLeads from "@/components/saved-leads";
 import ExportModal from "@/components/export-modal";
 import SearchLoadingState from "@/components/search-loading-state";
+import ApiStatusDashboard from "@/components/api-status-dashboard";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
