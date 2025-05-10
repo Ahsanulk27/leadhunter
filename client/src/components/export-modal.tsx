@@ -110,20 +110,22 @@ export default function ExportModal({ isOpen, onClose, leads, company }: ExportM
               <Button
                 type="button"
                 variant={exportFormat === 'excel' ? 'default' : 'outline'}
-                className="flex-1"
+                className="flex-1 relative"
                 onClick={() => setExportFormat('excel')}
                 disabled
               >
                 Excel
+                <span className="absolute -top-2 -right-2 text-xs bg-gray-100 text-gray-600 px-1 rounded-md">Soon</span>
               </Button>
               <Button
                 type="button"
                 variant={exportFormat === 'pdf' ? 'default' : 'outline'}
-                className="flex-1"
+                className="flex-1 relative"
                 onClick={() => setExportFormat('pdf')}
                 disabled
               >
                 PDF
+                <span className="absolute -top-2 -right-2 text-xs bg-gray-100 text-gray-600 px-1 rounded-md">Soon</span>
               </Button>
             </div>
           </div>
