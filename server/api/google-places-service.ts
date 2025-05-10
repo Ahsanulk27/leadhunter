@@ -348,19 +348,22 @@ export class GooglePlacesService {
       // Calculate average contacts per business for reporting
       const avgContactsPerBusiness = totalContactsGenerated / (totalProcessedBusinesses || 1);
       
+      // Create metadata object for stats reporting
+      const metaData = {
+        totalResultsFound,
+        totalProcessedBusinesses,
+        totalContactsGenerated,
+        pagesRetrieved: pageCount,
+        businessesWithNoContactsCount: businessesWithNoContacts.length,
+        businessesWithNoContactMethodsCount: businessesWithNoContactMethods.length,
+        averageContactsPerBusiness: avgContactsPerBusiness.toFixed(1),
+        quotaStatus: this.getQuotaUsage().status
+      };
+      
       return { 
         businesses, 
         sources: ['google-places-api'],
-        meta: {
-          totalResultsFound,
-          totalProcessedBusinesses,
-          totalContactsGenerated,
-          pagesRetrieved: pageCount,
-          businessesWithNoContacts: businessesWithNoContacts.length,
-          businessesWithNoContactMethods: businessesWithNoContactMethods.length,
-          averageContactsPerBusiness: avgContactsPerBusiness.toFixed(1),
-          quotaStatus: this.getQuotaUsage().status
-        }
+        meta: metaData
       };
     } catch (error) {
       console.error(`❌ GooglePlacesService error:`, error);
@@ -440,21 +443,39 @@ export class GooglePlacesService {
     const businessName = place.name;
     const businessCategories = place.types || [];
     const contacts: Contact[] = [];
-    const phoneNumber = details.formatted_phone_number || '';
+    const phoneNumber = details.formatted_phone_number || details.international_phone_number || '';
     
-    // Determine business type for appropriate contact generation
+    // Determine business type for appropriate contact generation - more comprehensive category detection
     const isRetail = businessCategories.some((cat: string) => 
-      ['store', 'shop', 'retail', 'clothing_store', 'shopping_mall', 'department_store'].includes(cat));
+      ['store', 'shop', 'retail', 'clothing_store', 'shopping_mall', 'department_store', 
+       'supermarket', 'convenience_store', 'electronics_store', 'furniture_store', 'hardware_store', 
+       'home_goods_store', 'jewelry_store', 'shoe_store', 'book_store'].includes(cat));
       
     const isRestaurant = businessCategories.some((cat: string) => 
-      ['restaurant', 'food', 'cafe', 'bar', 'bakery', 'meal_delivery'].includes(cat));
+      ['restaurant', 'food', 'cafe', 'bar', 'bakery', 'meal_delivery', 'meal_takeaway', 
+       'night_club', 'bakery', 'ice_cream', 'liquor_store'].includes(cat));
       
     const isTech = businessCategories.some((cat: string) => 
-      ['electronics_store', 'point_of_interest', 'establishment'].includes(cat));
+      ['electronics_store', 'point_of_interest', 'establishment', 'storage', 'premise', 
+       'moving_company', 'roofing_contractor', 'general_contractor'].includes(cat));
       
     const isService = businessCategories.some((cat: string) => 
-      ['lawyer', 'doctor', 'health', 'dentist', 'hospital', 'insurance_agency', 'real_estate_agency', 'finance'].includes(cat));
+      ['lawyer', 'doctor', 'health', 'dentist', 'hospital', 'insurance_agency', 'real_estate_agency', 
+       'finance', 'accounting', 'bank', 'beauty_salon', 'hair_care', 'spa', 'physiotherapist', 
+       'travel_agency', 'lodging', 'gym', 'car_repair', 'car_dealer', 'car_rental', 'car_wash',
+       'veterinary_care', 'locksmith', 'electrician', 'plumber', 'laundry'].includes(cat));
     
+    const isHospitality = businessCategories.some((cat: string) => 
+      ['lodging', 'hotel', 'resort', 'travel_agency', 'tourist_attraction', 'vacation_rental'].includes(cat));
+      
+    const isHealthcare = businessCategories.some((cat: string) => 
+      ['hospital', 'doctor', 'dentist', 'health', 'pharmacy', 'physiotherapist', 'veterinary_care'].includes(cat));
+      
+    const isEducation = businessCategories.some((cat: string) => 
+      ['school', 'university', 'primary_school', 'secondary_school', 'book_store', 'library'].includes(cat));
+      
+    // Business type constants defined above
+      
     // Generate domain for email addresses from website if available
     let emailDomain = '';
     try {
@@ -470,7 +491,7 @@ export class GooglePlacesService {
     const primaryContact: Contact = {
       contactId: uuidv4(),
       name: 'Main Contact',
-      position: 'Reception',
+      position: isHospitality ? 'Front Desk' : (isHealthcare ? 'Reception' : 'Front Office'),
       email: emailDomain ? `contact@${emailDomain}` : '',
       phoneNumber: phoneNumber,
       isDecisionMaker: false,
@@ -479,7 +500,8 @@ export class GooglePlacesService {
     };
     contacts.push(primaryContact);
     
-    // Generate an appropriate manager contact based on business type
+    // Generate different types of manager contacts based on business category
+    // First determine the manager title based on business type
     let managerTitle = 'Manager';
     if (isRestaurant) {
       managerTitle = 'Restaurant Manager';
@@ -489,6 +511,12 @@ export class GooglePlacesService {
       managerTitle = 'Operations Manager';
     } else if (isService) {
       managerTitle = 'Office Manager';
+    } else if (isHospitality) {
+      managerTitle = 'General Manager';
+    } else if (isHealthcare) {
+      managerTitle = 'Practice Manager';
+    } else if (isEducation) {
+      managerTitle = 'Administrative Director';
     }
     
     const managerContact: Contact = {
@@ -503,12 +531,29 @@ export class GooglePlacesService {
     };
     contacts.push(managerContact);
     
-    // Generate owner/director contact for decision making
+    // Generate owner/director contact for decision making with appropriate title
+    let ownerTitle = 'Owner';
+    if (isService) {
+      ownerTitle = 'Director';
+    } else if (isRestaurant) {
+      ownerTitle = 'Owner';
+    } else if (isTech) {
+      ownerTitle = 'CEO';
+    } else if (isHospitality) {
+      ownerTitle = 'Managing Director';
+    } else if (isHealthcare) {
+      ownerTitle = businessCategories.includes('hospital') ? 'Chief Medical Officer' : 'Medical Director';
+    } else if (isEducation) {
+      ownerTitle = 'Principal';
+    } else {
+      ownerTitle = 'President';
+    }
+    
     const ownerContact: Contact = {
       contactId: uuidv4(),
       name: `Owner`,
-      position: isService ? 'Director' : (isRestaurant ? 'Owner' : 'CEO'),
-      email: emailDomain ? `owner@${emailDomain}` : '',
+      position: ownerTitle,
+      email: emailDomain ? `${ownerTitle.toLowerCase().replace(/\s+/g, '.')}@${emailDomain}` : '',
       phoneNumber: phoneNumber,
       isDecisionMaker: true,
       companyName: businessName,
@@ -516,8 +561,10 @@ export class GooglePlacesService {
     };
     contacts.push(ownerContact);
     
-    // If retail or restaurant, add customer service
-    if (isRetail || isRestaurant) {
+    // Add department-specific contacts based on business type
+    
+    // Common for most businesses - customer service
+    if (isRetail || isRestaurant || isHospitality) {
       contacts.push({
         contactId: uuidv4(),
         name: `Customer Service`,
@@ -530,19 +577,32 @@ export class GooglePlacesService {
       });
     }
     
-    // If tech company or service, add sales and marketing contacts
-    if (isTech || isService) {
+    // Sales contacts - different titles based on business type
+    if (isTech || isService || isRetail || isHospitality) {
+      let salesTitle = 'Sales Manager';
+      
+      if (isRetail) {
+        salesTitle = 'Sales Associate';
+      } else if (isHospitality) {
+        salesTitle = 'Reservations Manager';
+      } else if (isTech) {
+        salesTitle = 'Business Development Manager';
+      }
+      
       contacts.push({
         contactId: uuidv4(),
         name: `Sales Department`,
-        position: 'Sales Manager',
+        position: salesTitle,
         email: emailDomain ? `sales@${emailDomain}` : '',
         phoneNumber: phoneNumber,
-        isDecisionMaker: false,
+        isDecisionMaker: salesTitle.includes('Manager'),
         companyName: businessName,
         companyId: place.place_id
       });
-      
+    }
+    
+    // Marketing contact
+    if (isTech || isService || isRetail || isHospitality) {
       contacts.push({
         contactId: uuidv4(),
         name: `Marketing Department`,
@@ -555,6 +615,47 @@ export class GooglePlacesService {
       });
     }
     
+    // Add industry-specific contacts
+    if (isHealthcare) {
+      contacts.push({
+        contactId: uuidv4(),
+        name: `Appointments`,
+        position: 'Appointments Coordinator',
+        email: emailDomain ? `appointments@${emailDomain}` : '',
+        phoneNumber: phoneNumber,
+        isDecisionMaker: false,
+        companyName: businessName,
+        companyId: place.place_id
+      });
+    }
+    
+    if (isEducation) {
+      contacts.push({
+        contactId: uuidv4(),
+        name: `Admissions`,
+        position: 'Admissions Officer',
+        email: emailDomain ? `admissions@${emailDomain}` : '',
+        phoneNumber: phoneNumber,
+        isDecisionMaker: false,
+        companyName: businessName,
+        companyId: place.place_id
+      });
+    }
+    
+    if (isHospitality) {
+      contacts.push({
+        contactId: uuidv4(),
+        name: `Events Department`,
+        position: 'Events Manager',
+        email: emailDomain ? `events@${emailDomain}` : '',
+        phoneNumber: phoneNumber,
+        isDecisionMaker: true,
+        companyName: businessName,
+        companyId: place.place_id
+      });
+    }
+    
+    // Return all generated contacts
     return contacts;
   }
 }
