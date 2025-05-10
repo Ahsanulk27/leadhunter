@@ -117,7 +117,9 @@ export class GooglePlacesService {
       this.trackApiCall('textsearch', data.status);
       let allResults: any[] = [];
       let pageCount = 0;
-      const MAX_PAGES = 3; // Limit to 3 pages of results to avoid rate limiting
+      // Google Places API typically returns up to 60 results (3 pages of 20 each)
+      // but we'll continue fetching as long as there are more pages available
+      const MAX_PAGES = 10; // Increased to a higher limit to get all available data
       
       if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
         const errorMessage = `❌ GooglePlacesService: API error: ${data.status}`;
@@ -162,8 +164,9 @@ export class GooglePlacesService {
         console.log(`✅ GooglePlacesService: Found ${data.results.length} places on page ${pageCount}`);
       }
       
-      // Get next pages if we have a next_page_token and haven't reached max results
-      while (data.next_page_token && allResults.length < maxResults && pageCount < MAX_PAGES) {
+      // Continue fetching pages as long as there's a next_page_token available
+      // The Google Places API will automatically stop providing tokens when no more results are available
+      while (data.next_page_token && pageCount < MAX_PAGES) {
         // Need to wait a bit before using the next page token
         await new Promise(resolve => setTimeout(resolve, 2000));
         
@@ -209,6 +212,10 @@ export class GooglePlacesService {
       // Track place IDs to avoid duplicates
       const processedPlaceIds = new Set<string>();
       
+      // Log the full result count for data validation
+      const totalResultsFound = allResults.length;
+      console.log(`📊 GooglePlacesService: Beginning to process ${totalResultsFound} total results`);
+      
       for (const place of allResults) {
         try {
           // Skip if we've already processed this place
@@ -244,20 +251,27 @@ export class GooglePlacesService {
           };
           
           businesses.push(business);
-          
-          // Stop if we've reached the max results
-          if (businesses.length >= maxResults) {
-            console.log(`✅ GooglePlacesService: Reached maximum of ${maxResults} results`);
-            break;
-          }
         } catch (error) {
           console.error(`❌ GooglePlacesService: Error processing place:`, error);
         }
       }
       
+      // Log the final business count vs. initial results count
+      const totalProcessedBusinesses = businesses.length;
+      const totalContactsGenerated = businesses.reduce((sum, business) => sum + business.contacts.length, 0);
+      
+      console.log(`📊 GooglePlacesService: Successfully processed ${totalProcessedBusinesses}/${totalResultsFound} businesses`);
+      console.log(`📊 GooglePlacesService: Generated a total of ${totalContactsGenerated} contacts`);
+      
       return { 
         businesses, 
-        sources: ['google-places-api'] 
+        sources: ['google-places-api'],
+        meta: {
+          totalResultsFound,
+          totalProcessedBusinesses,
+          totalContactsGenerated,
+          pagesRetrieved: pageCount
+        }
       };
     } catch (error) {
       console.error(`❌ GooglePlacesService error:`, error);
