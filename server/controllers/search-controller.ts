@@ -98,7 +98,19 @@ export class SearchController {
         
         if (industryResults && industryResults.length > 0) {
           console.log(`📍 SearchController: Found ${industryResults.length} businesses in industry directories`);
-          realBusinesses = [...industryResults];
+          allBusinesses.push(...industryResults.map(business => ({
+            name: business.name,
+            industry: params.industry || business.industry || '',
+            location: params.location || business.location || '',
+            size: params.size || business.size || '',
+            address: business.address || '',
+            phone: business.phone || '',
+            website: business.website || '',
+            email: business.email || '',
+            contacts: business.contacts || [],
+            scrapeSource: 'Industry Directory',
+            scrapeTimestamp: Date.now()
+          })));
         }
       } catch (industryError) {
         console.error("Error with industry directory search:", industryError);
@@ -106,14 +118,34 @@ export class SearchController {
     }
     
     // 1. Try Google Maps with puppeteer if we don't have results yet
-    if (realBusinesses.length === 0) {
+    if (allBusinesses.length === 0) {
       console.log(`📍 SearchController: Searching Google Maps for: ${searchQuery}`);
       try {
         const googleMapsResults = await googleMapsScraper.searchBusinesses(searchQuery);
         
         if (googleMapsResults && googleMapsResults.length > 0) {
           console.log(`📍 SearchController: Found ${googleMapsResults.length} businesses on Google Maps`);
-          realBusinesses = [...googleMapsResults];
+          allBusinesses.push(...googleMapsResults.map(business => ({
+            name: business.name,
+            industry: params.industry || (business.types && business.types.length > 0 ? 
+                                    business.types[0].replace(/_/g, ' ') : ''),
+            location: params.location || business.vicinity || '',
+            size: params.size || '',
+            address: business.formatted_address || business.vicinity || '',
+            phone: business.phone || '',
+            website: business.website || '',
+            email: '',
+            contacts: [{
+              id: 1,
+              name: `Contact at ${business.name}`,
+              position: 'Manager',
+              email: `contact@${this.formatDomain(business.name)}`,
+              companyPhone: business.phone || '',
+              isDecisionMaker: true
+            }],
+            scrapeSource: 'Google Maps',
+            scrapeTimestamp: Date.now()
+          })));
         }
       } catch (googleMapsError) {
         console.error("Error with Google Maps search:", googleMapsError);
@@ -121,14 +153,33 @@ export class SearchController {
     }
     
     // 2. Try Yelp if we still don't have results
-    if (realBusinesses.length === 0) {
+    if (allBusinesses.length === 0) {
       console.log(`📍 SearchController: Searching Yelp for: ${searchQuery}`);
       try {
         const yelpResults = await yelpScraper.searchBusinesses(searchQuery, params.location);
         
         if (yelpResults && yelpResults.length > 0) {
           console.log(`📍 SearchController: Found ${yelpResults.length} businesses on Yelp`);
-          realBusinesses = [...yelpResults];
+          allBusinesses.push(...yelpResults.map(business => ({
+            name: business.name,
+            industry: params.industry || business.categories?.join(', ') || '',
+            location: params.location || business.location || '',
+            size: params.size || this.employeeCountToRange(business.employeeCount || 0) || '',
+            address: business.address || '',
+            phone: business.phone || '',
+            website: business.website || '',
+            email: business.email || '',
+            contacts: [{
+              id: 1,
+              name: business.ownerName || `Owner at ${business.name}`,
+              position: 'Owner',
+              email: business.email || `owner@${this.formatDomain(business.name)}`,
+              companyPhone: business.phone || '',
+              isDecisionMaker: true
+            }],
+            scrapeSource: 'Yelp',
+            scrapeTimestamp: Date.now()
+          })));
         }
       } catch (yelpError) {
         console.error("Error with Yelp search:", yelpError);
@@ -136,14 +187,33 @@ export class SearchController {
     }
     
     // 3. Try Yellow Pages as a last resort
-    if (realBusinesses.length === 0) {
+    if (allBusinesses.length === 0) {
       console.log(`📍 SearchController: Searching Yellow Pages for: ${searchQuery}`);
       try {
         const yellowPagesResults = await googlePlacesService.scrapeYellowPages(searchQuery);
         
         if (yellowPagesResults && yellowPagesResults.length > 0) {
           console.log(`📍 SearchController: Found ${yellowPagesResults.length} businesses on Yellow Pages`);
-          realBusinesses = [...yellowPagesResults];
+          allBusinesses.push(...yellowPagesResults.map(business => ({
+            name: business.name,
+            industry: params.industry || business.categories?.join(', ') || '',
+            location: params.location || business.location || '',
+            size: params.size || '',
+            address: business.address || '',
+            phone: business.phone || '',
+            website: business.website || '',
+            email: business.email || '',
+            contacts: [{
+              id: 1,
+              name: `Contact at ${business.name}`,
+              position: 'Manager',
+              email: `contact@${this.formatDomain(business.name)}`,
+              companyPhone: business.phone || '',
+              isDecisionMaker: true
+            }],
+            scrapeSource: 'Yellow Pages',
+            scrapeTimestamp: Date.now()
+          })));
         }
       } catch (yellowPagesError) {
         console.error("Error with Yellow Pages search:", yellowPagesError);
@@ -151,8 +221,8 @@ export class SearchController {
     }
     
     // If we found any businesses, get more details for the first one
-    if (realBusinesses.length > 0) {
-      const topBusiness = realBusinesses[0];
+    if (allBusinesses.length > 0) {
+      const topBusiness = allBusinesses[0];
       
       // Business data with detailed info from scrapers
       let businessDetails = null;
