@@ -137,10 +137,18 @@ async function startServer(app: Express) {
       }
     });
     
-    // Start the server
-    server.listen(PORT, () => {
+    // Start the server with better error handling
+    server.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`🔍 NexLead Hunter is now ready to find business leads`);
+    }).on('error', (e: any) => {
+      if (e.code === 'EADDRINUSE') {
+        console.error(`⚠️ Port ${PORT} is already in use. Please free up the port and try again.`);
+        process.exit(1);
+      } else {
+        console.error('Failed to start server:', e);
+        process.exit(1);
+      }
     });
     
     return server;
