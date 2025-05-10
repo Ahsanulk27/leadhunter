@@ -151,7 +151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // We ONLY use real data - no fallbacks to simulated data
       if (!scrapedData) {
-        // If no industry provided, prompt for more information
+        // If no search criteria provided, prompt for more information
         if (!industry && !company) {
           return res.status(404).json({ 
             error: "Missing search criteria", 
@@ -159,26 +159,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         
-        // For demonstration/testing - generate data for industry search
-        // This simulates what would happen with fully integrated API keys
-        if (industry) {
-          const category = getIndustryCategory(industry);
-          console.log(`Generating sample industry data for: ${industry} (${category})`);
+        // Try additional real data sources if we have industry or location
+        if (industry || location) {
+          console.log(`Trying additional real data sources for: ${industry || ''} in ${location || ''}`);
           
-          // Generate sample industry data for testing the app
-          scrapedData = generateIndustrySpecificData(category, company || `Leading ${industry} Business`, location);
-          
-          // Set the proper counts
-          if (scrapedData) {
-            console.log(`Generated ${scrapedData.contacts.length} industry-specific sample contacts`);
+          try {
+            // Import Yelp scraper
+            const { yelpScraper } = await import('./api/yelp-scraper');
+            
+            // Search Yelp for businesses matching the criteria
+            console.log(`Searching Yelp for: ${industry || company} in ${location || 'any location'}`);
+            const yelpBusinesses = await yelpScraper.searchBusinesses(industry || company || '', location);
+            
+            if (yelpBusinesses && yelpBusinesses.length > 0) {
+              console.log(`Found ${yelpBusinesses.length} businesses on Yelp`);
+              
+              // Get the first business for detailed info
+              const topBusiness = yelpBusinesses[0];
+              
+              // Get detailed information if possible
+              let businessDetails = null;
+              if (topBusiness.yelp_url) {
+                try {
+                  businessDetails = await yelpScraper.getBusinessDetails(topBusiness.yelp_url);
+                } catch (detailError) {
+                  console.error('Error getting Yelp business details:', detailError);
+                }
+              }
+              
+              if (businessDetails) {
+                // Use the detailed information
+                scrapedData = {
+                  name: businessDetails.name,
+                  industry: industry || '',
+                  location: location || businessDetails.address,
+                  size: size || '',
+                  address: businessDetails.address,
+                  contacts: businessDetails.contacts || []
+                };
+                
+                console.log(`Successfully retrieved real business data from Yelp`);
+              } else {
+                // Create basic data from the search result
+                scrapedData = {
+                  name: topBusiness.name,
+                  industry: industry || (topBusiness.types && topBusiness.types.length > 0 ? topBusiness.types[0].replace(/_/g, ' ') : ''),
+                  location: location || topBusiness.vicinity || '',
+                  size: size || '',
+                  address: topBusiness.formatted_address || topBusiness.vicinity || '',
+                  contacts: [{
+                    id: 1,
+                    name: `Contact at ${topBusiness.name}`,
+                    position: "Business Representative",
+                    email: null,
+                    companyPhone: topBusiness.phone || null,
+                    personalPhone: null,
+                    isDecisionMaker: false,
+                    influence: 50,
+                    notes: 'Contact information from real business listing.'
+                  }]
+                };
+                
+                console.log(`Created basic data from Yelp business listing`);
+              }
+            }
+          } catch (yelpError) {
+            console.error('Error searching Yelp:', yelpError);
           }
         }
         
-        // If we still don't have any data
+        // If we still don't have any data after trying all real sources
         if (!scrapedData) {
           return res.status(404).json({ 
-            error: "No business data found for this search", 
-            message: "Try searching with different criteria, such as a more specific industry or a location. You can also search for a specific company name that has publicly available contact information."
+            error: "No real business data found for this search", 
+            message: "No real business information could be found after searching multiple sources. Try searching with different criteria, such as a more specific industry or a location."
           });
         }
       }
