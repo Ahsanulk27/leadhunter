@@ -8,7 +8,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Download } from 'lucide-react';
 import { SearchX } from 'lucide-react';
-// Remove file-saver import as we'll use native browser download
 
 interface Location {
   name: string;
@@ -18,6 +17,32 @@ interface Location {
 interface Industry {
   name: string;
   displayName: string;
+}
+
+interface Business {
+  name: string;
+  category: string;
+  address: string;
+  phoneNumber: string;
+  website: string;
+  contacts: Contact[];
+}
+
+interface Contact {
+  name: string;
+  position: string;
+  email: string;
+  phoneNumber: string;
+  isDecisionMaker: boolean;
+}
+
+interface SearchResults {
+  searchTerm: string;
+  totalLocations: number;
+  totalBusinesses: number;
+  totalContacts: number;
+  locationResults: any[];
+  businesses: Business[];
 }
 
 const BulkLeadGenerator: React.FC = () => {
@@ -32,7 +57,9 @@ const BulkLeadGenerator: React.FC = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [locations, setLocations] = useState<Location[]>([]);
   const [industries, setIndustries] = useState<Industry[]>([]);
-  const [results, setResults] = useState<any>(null);
+  const [results, setResults] = useState<SearchResults | null>(null);
+  
+  const { toast } = useToast();
   
   // Load saved results from session storage on component mount
   useEffect(() => {
@@ -54,503 +81,591 @@ const BulkLeadGenerator: React.FC = () => {
         if (savedLocations) {
           setSelectedLocations(JSON.parse(savedLocations));
         }
-      } catch (err) {
-        console.error("Error restoring saved search:", err);
-        // Clear corrupted data
-        window.sessionStorage.removeItem('bulkLeadResults');
+      } catch (error) {
+        console.error("Error parsing saved search results:", error);
       }
     }
+    
+    // Load available locations
+    fetchLocations();
+    
+    // Load available industries
+    fetchIndustries();
   }, []);
   
-  const { toast } = useToast();
-  
-  // Fetch available locations and industries on component mount
-  useEffect(() => {
-    const fetchLocationsAndIndustries = async () => {
-      try {
-        // Add a timestamp to prevent caching issues
-        const timestamp = new Date().getTime();
-        console.log("Fetching locations and industries...");
+  // Fetch available locations from the backend
+  const fetchLocations = async () => {
+    try {
+      const response = await fetch('/api/bulk-leads/locations');
+      const data = await response.json();
+      
+      if (data && data.locations) {
+        // Format location names for display
+        const formattedLocations = data.locations.map((loc: string) => ({
+          name: loc,
+          displayName: loc.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+        }));
         
-        // Fetch locations
-        const locationsUrl = `/api/bulk-leads/locations?_=${timestamp}`;
-        console.log("Locations URL:", locationsUrl);
-        const locationsResponse = await fetch(locationsUrl);
-        console.log("Locations response status:", locationsResponse.status);
-        
-        if (locationsResponse.ok) {
-          const locationsData = await locationsResponse.json();
-          console.log("Received locations data:", locationsData);
-          
-          if (locationsData.locations && Array.isArray(locationsData.locations)) {
-            // Format locations for display
-            const formattedLocations = locationsData.locations.map((loc: string) => ({
-              name: loc,
-              displayName: loc.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
-            }));
-            console.log("Formatted locations:", formattedLocations);
-            setLocations(formattedLocations);
-          } else {
-            console.error("Invalid locations data format:", locationsData);
-          }
-        } else {
-          console.error("Failed to fetch locations:", await locationsResponse.text());
-        }
-        
-        // Fetch industries
-        const industriesUrl = `/api/bulk-leads/industries?_=${timestamp}`;
-        const industriesResponse = await fetch(industriesUrl);
-        console.log("Industries response status:", industriesResponse.status);
-        
-        if (industriesResponse.ok) {
-          const industriesData = await industriesResponse.json();
-          console.log("Received industries data:", industriesData);
-          
-          if (industriesData.industries && Array.isArray(industriesData.industries)) {
-            // Format industries for display
-            const formattedIndustries = industriesData.industries.map((ind: string) => ({
-              name: ind,
-              displayName: ind.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
-            }));
-            setIndustries(formattedIndustries);
-          } else {
-            console.error("Invalid industries data format:", industriesData);
-          }
-        } else {
-          console.error("Failed to fetch industries:", await industriesResponse.text());
-        }
-      } catch (error) {
-        console.error('Error fetching locations and industries:', error);
-        toast({
-          title: 'Failed to load options',
-          description: 'Could not load available locations and industries. Please refresh the page.',
-          variant: 'destructive'
-        });
+        setLocations(formattedLocations);
       }
-    };
-    
-    fetchLocationsAndIndustries();
-  }, [toast]);
-  
-  const handleLocationToggle = (location: string) => {
-    setSelectedLocations(prev => {
-      if (prev.includes(location)) {
-        return prev.filter(loc => loc !== location);
-      } else {
-        return [...prev, location];
-      }
-    });
+    } catch (error) {
+      console.error("Error fetching locations:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load available locations. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
   
-  const handleSearch = async () => {
+  // Fetch available industries from the backend
+  const fetchIndustries = async () => {
+    try {
+      const response = await fetch('/api/bulk-leads/industries');
+      const data = await response.json();
+      
+      if (data && data.industries) {
+        // Format industry names for display
+        const formattedIndustries = data.industries.map((ind: string) => ({
+          name: ind,
+          displayName: ind.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+        }));
+        
+        setIndustries(formattedIndustries);
+      }
+    } catch (error) {
+      console.error("Error fetching industries:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load available industries. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  // Toggle location selection
+  const toggleLocation = (locationName: string) => {
+    if (selectedLocations.includes(locationName)) {
+      setSelectedLocations(selectedLocations.filter(loc => loc !== locationName));
+    } else {
+      setSelectedLocations([...selectedLocations, locationName]);
+    }
+  };
+  
+  // Handle form submission to search for leads
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
     if (!searchTerm) {
       toast({
-        title: 'Search term required',
-        description: 'Please enter a business type, service, or industry to search for.',
-        variant: 'destructive'
+        title: "Missing Input",
+        description: "Please enter a search term.",
+        variant: "destructive",
       });
       return;
     }
     
+    if (selectedLocations.length === 0) {
+      toast({
+        title: "Missing Input",
+        description: "Please select at least one location.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsLoading(true);
+    setResults(null);
+    
     try {
-      setIsLoading(true);
-      setResults(null);
-      
+      // Call the custom bulk lead search endpoint
       const response = await fetch('/api/bulk-leads/custom', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           query: searchTerm,
-          locations: selectedLocations.length > 0 ? selectedLocations : undefined,
+          locations: selectedLocations,
           maxPerLocation: maxResults,
           onlyDecisionMakers
         })
       });
       
       if (!response.ok) {
-        throw new Error('Failed to generate leads');
+        throw new Error('Failed to search for leads');
       }
       
       const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      
+      // Update state with search results
       setResults(data);
       
-      // Save results to session storage for persistence between tab navigation
-      try {
-        // Save the results
-        window.sessionStorage.setItem('bulkLeadResults', JSON.stringify(data));
-        // Save the search term
-        window.sessionStorage.setItem('bulkLeadSearchTerm', searchTerm);
-        // Save selected locations
-        window.sessionStorage.setItem('bulkLeadSelectedLocations', JSON.stringify(selectedLocations));
-        
-        console.log("Saved search results to session storage");
-      } catch (err) {
-        console.error("Error saving search results to session storage:", err);
-        // Non-critical error, don't show to user
-      }
+      // Save search results to session storage
+      window.sessionStorage.setItem('bulkLeadResults', JSON.stringify(data));
+      window.sessionStorage.setItem('bulkLeadSearchTerm', searchTerm);
+      window.sessionStorage.setItem('bulkLeadSelectedLocations', JSON.stringify(selectedLocations));
       
-      // Save to database using the API
-      try {
-        fetch('/api/bulk-leads', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            searchTerm,
-            locations: selectedLocations,
-            businesses: data.businesses
-          })
-        });
-        // This is a non-blocking operation, we don't need to await it
-      } catch (err) {
-        console.error("Error saving to database:", err);
-        // Non-critical error, don't show to user
-      }
-      
-      // Show success message
+      // Show success toast
       toast({
-        title: 'Lead generation complete',
-        description: `Found ${data.totalBusinesses} businesses with ${data.totalContacts} contacts.`,
-        variant: 'default'
+        title: "Search Complete",
+        description: `Found ${data.totalBusinesses} businesses with ${data.totalContacts} contacts across ${data.totalLocations} locations.`,
+        variant: "default",
       });
     } catch (error) {
-      console.error('Error generating leads:', error);
+      console.error("Error searching for leads:", error);
       toast({
-        title: 'Failed to generate leads',
-        description: 'An error occurred while generating leads. Please try again.',
-        variant: 'destructive'
+        title: "Search Failed",
+        description: "Failed to search for leads. Please try again.",
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
     }
   };
   
-  // Helper function to escape CSV values
-  const escapeCsvValue = (value: any): string => {
-    if (value === null || value === undefined) return '""';
+  // Utility function to properly escape CSV values
+  const escapeCsvValue = (value: string) => {
+    if (!value) return '""';
     
-    // Convert to string and escape double quotes by doubling them
-    const stringValue = String(value).replace(/"/g, '""');
+    // If value contains commas, quotes, or newlines, wrap in quotes and escape internal quotes
+    if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+      return `"${value.replace(/"/g, '""')}"`;
+    }
     
-    // Wrap in quotes
-    return `"${stringValue}"`;
+    return value;
   };
   
-  // Export for direct iPhone download
-  const exportToCSV = async () => {
-    if (!results || !results.businesses || results.businesses.length === 0) {
+  // Handle exporting search results as CSV
+  const handleExport = async () => {
+    if (!results || results.businesses.length === 0) {
       toast({
-        title: 'No data to export',
-        description: 'Please generate leads first before exporting.',
-        variant: 'destructive'
+        title: "No Results",
+        description: "There are no results to export. Please perform a search first.",
+        variant: "destructive",
       });
       return;
     }
     
     try {
-      // Show a loading toast
+      // Show loading toast
       toast({
-        title: 'Preparing your export...',
-        description: 'Creating CSV file for direct download to your device.',
+        title: 'Preparing export...',
+        description: 'Creating CSV file for download',
         variant: 'default'
       });
       
       setIsExporting(true);
       
-      // Generate the timestamp for the filename
+      // Generate filename with timestamp
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const sanitizedSearchTerm = (searchTerm || 'leads').replace(/[^a-z0-9]/gi, '_').toLowerCase();
       const filename = `nexlead_${sanitizedSearchTerm}_${timestamp}.csv`;
       
-      // For iPhone, we'll use a special approach to trigger download directly to Files app
-      // For iOS devices, we'll use the direct download through the bulk-leads endpoint
-      // This approach avoids any cross-tab issues by handling everything in one request
-
-      // Determine if we're on iOS
+      // Detect iOS devices
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
       
       if (isIOS) {
-        console.log("iOS device detected, using direct download approach");
-        
-        // CRITICAL FIX: Use the direct CSV download without database references
-        // Generate the CSV directly in the frontend for maximum reliability
-        let csvContent = 'Company Name,Industry,Address,Phone,Website,Contact Name,Contact Position,Contact Email,Contact Phone,Is Decision Maker\n';
-        
-        // Build CSV directly from the search results
-        results.businesses.forEach((business: any) => {
+        // iOS-specific export logic
+        handleIOSExport(filename);
+      } else {
+        // Standard export for other devices
+        handleStandardExport(filename);
+      }
+    } catch (error) {
+      console.error("Error exporting results:", error);
+      toast({
+        title: "Export Failed",
+        description: "Failed to export results. Please try again.",
+        variant: "destructive",
+      });
+      setIsExporting(false);
+    }
+  };
+  
+  // Handle CSV export specifically for iOS devices
+  const handleIOSExport = (filename: string) => {
+    try {
+      console.log("iOS device detected, using pure client-side download approach");
+      
+      // Generate CSV content
+      let csvContent = 'Company Name,Industry,Address,Phone,Website,Contact Name,Contact Position,Contact Email,Contact Phone,Is Decision Maker\n';
+      
+      // Add data rows from results
+      if (results && results.businesses) {
+        results.businesses.forEach((business) => {
           if (!business.contacts || business.contacts.length === 0) {
-            csvContent += `${escapeCsvValue(business.name || '')},${escapeCsvValue(business.category || '')},${escapeCsvValue(business.address || '')},${escapeCsvValue(business.phoneNumber || '')},${escapeCsvValue(business.website || '')},,,,,""\n`;
+            // If no contacts, add one row with just business info
+            csvContent += [
+              escapeCsvValue(business.name || ''),
+              escapeCsvValue(business.category || ''),
+              escapeCsvValue(business.address || ''),
+              escapeCsvValue(business.phoneNumber || ''),
+              escapeCsvValue(business.website || ''),
+              '', '', '', '', ''
+            ].join(',') + '\n';
           } else {
-            business.contacts.forEach((contact: any) => {
-              csvContent += `${escapeCsvValue(business.name || '')},${escapeCsvValue(business.category || '')},${escapeCsvValue(business.address || '')},${escapeCsvValue(business.phoneNumber || '')},${escapeCsvValue(business.website || '')},${escapeCsvValue(contact.name || '')},${escapeCsvValue(contact.position || '')},${escapeCsvValue(contact.email || '')},${escapeCsvValue(contact.phoneNumber || '')},${escapeCsvValue(contact.isDecisionMaker ? 'Yes' : 'No')}\n`;
+            // Add a row for each contact
+            business.contacts.forEach((contact) => {
+              csvContent += [
+                escapeCsvValue(business.name || ''),
+                escapeCsvValue(business.category || ''),
+                escapeCsvValue(business.address || ''),
+                escapeCsvValue(business.phoneNumber || ''),
+                escapeCsvValue(business.website || ''),
+                escapeCsvValue(contact.name || ''),
+                escapeCsvValue(contact.position || ''),
+                escapeCsvValue(contact.email || ''),
+                escapeCsvValue(contact.phoneNumber || ''),
+                escapeCsvValue(contact.isDecisionMaker ? 'Yes' : 'No')
+              ].join(',') + '\n';
             });
           }
         });
-        
-        // Create a Blob with the CSV content
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        
-        // Create a data URL from the Blob
-        const dataUrl = URL.createObjectURL(blob);
-        
-        // FOR iOS - we'll use a direct URL
-        const exportUrl = dataUrl;
-        
-        // Alert user about the download
-        alert('CSV download started! Check your Files app shortly.');
-        
-        // Create an anchor element to trigger the download
-        const a = document.createElement('a');
-        a.href = exportUrl;
-        a.download = filename;
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        
-        // On iOS, we need to be very explicit
-        a.rel = 'noopener';
-        a.target = '_blank';
-        
-        // Trigger the click and download
-        a.click();
-        
-        // Cleanup
-        setTimeout(() => {
-          document.body.removeChild(a);
-          URL.revokeObjectURL(exportUrl);
-        }, 1000);
-        
-        // No cleanup needed for the direct URL approach
-      } else {
-        // For non-iOS devices, use the regular fetch approach
-        const dataResponse = await fetch('/api/bulk-leads/export-csv', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            searchTerm,
-            locations: selectedLocations,
-            businesses: results.businesses
-          })
-        });
-        
-        if (!dataResponse.ok) {
-          throw new Error('Failed to prepare data for download');
-        }
-        
-        // For non-iOS, we can use a blob approach which is more reliable
-        const blob = await dataResponse.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.style.display = 'none';
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        
-        // Clean up
-        setTimeout(() => {
-          window.URL.revokeObjectURL(url);
-          document.body.removeChild(a);
-        }, 1000);
       }
       
-      // Reset the exporting state and show success message
-      // Use a slightly longer timeout since we're redirecting
-      setTimeout(() => {
-        setIsExporting(false);
-        
-        toast({
-          title: 'Download initiated!',
-          description: 'Your CSV file should now be downloading to your device.',
-          variant: 'default'
-        });
-      }, 500);
-    } catch (error) {
-      console.error('Error initiating CSV download:', error);
-      setIsExporting(false);
+      // Create a Blob with the CSV content
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       
+      // Create a data URL for the file
+      const dataUrl = URL.createObjectURL(blob);
+      
+      // Create an anchor element to trigger the download
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = dataUrl;
+      a.download = filename;
+      
+      // For iOS, we need to open in a new tab
+      a.target = '_blank';
+      a.rel = 'noopener';
+      
+      // Add to DOM, click, and clean up
+      document.body.appendChild(a);
+      a.click();
+      
+      // Cleanup after a short delay
+      setTimeout(() => {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(dataUrl);
+      }, 100);
+      
+      // Show success message
       toast({
-        title: 'Download failed',
-        description: 'There was a problem creating your export file. Please try again.',
-        variant: 'destructive'
+        title: "Download Started",
+        description: "Your file is being downloaded. Check your browser or Files app.",
+        variant: "default",
       });
+    } catch (error) {
+      console.error("Error with iOS export:", error);
+      toast({
+        title: "Export Failed",
+        description: "Could not create export file. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+  
+  // Handle CSV export for standard browsers
+  const handleStandardExport = async (filename: string) => {
+    try {
+      // For standard browsers, we can use the server endpoint
+      const response = await fetch('/api/bulk-leads/export-csv', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          searchTerm: searchTerm,
+          locations: selectedLocations,
+          businesses: results?.businesses || []
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to generate export');
+      }
+      
+      // Get the response as a blob
+      const blob = await response.blob();
+      
+      // Create a URL for the blob
+      const url = window.URL.createObjectURL(blob);
+      
+      // Create an anchor element to trigger the download
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = filename;
+      
+      // Add to DOM, click, and clean up
+      document.body.appendChild(a);
+      a.click();
+      
+      // Cleanup
+      setTimeout(() => {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      }, 100);
+      
+      // Show success message
+      toast({
+        title: "Export Successful",
+        description: "Your leads have been exported successfully.",
+        variant: "default",
+      });
+    } catch (error) {
+      console.error("Error with standard export:", error);
+      toast({
+        title: "Export Failed",
+        description: "Failed to export results. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
     }
   };
   
   return (
-    <div className="w-full max-w-6xl mx-auto p-4">
+    <div className="bulk-lead-generator">
       <Card className="w-full">
         <CardHeader>
           <CardTitle>Bulk Lead Generator</CardTitle>
           <CardDescription>
-            Generate leads for any business type across multiple locations at once.
+            Search for leads across multiple locations simultaneously
           </CardDescription>
         </CardHeader>
+        
         <CardContent>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="searchTerm">What type of businesses are you looking for?</Label>
-              <Input
-                id="searchTerm"
-                placeholder="E.g., dentists, restaurants, plumbers, law firms..."
+          <form onSubmit={handleSearch} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="search-term">What are you looking for?</Label>
+              <Input 
+                id="search-term"
+                placeholder="e.g. Restaurants, Law Firms, Software Companies"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="mt-1"
+                disabled={isLoading}
               />
+              <p className="text-sm text-muted-foreground">
+                Enter any business type, industry, or specific search term
+              </p>
             </div>
             
-            <div>
-              <Label>Locations to search in (select multiple)</Label>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-1">
+            <div className="space-y-2">
+              <Label>Select Locations</Label>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                 {locations.map((location) => (
                   <div key={location.name} className="flex items-center space-x-2">
-                    <Checkbox
+                    <Checkbox 
                       id={`location-${location.name}`}
                       checked={selectedLocations.includes(location.name)}
-                      onCheckedChange={() => handleLocationToggle(location.name)}
+                      onCheckedChange={() => toggleLocation(location.name)}
+                      disabled={isLoading}
                     />
-                    <Label htmlFor={`location-${location.name}`} className="cursor-pointer">
+                    <label 
+                      htmlFor={`location-${location.name}`}
+                      className="text-sm cursor-pointer"
+                    >
                       {location.displayName}
-                    </Label>
+                    </label>
                   </div>
                 ))}
               </div>
-              {locations.length === 0 && (
-                <div className="text-sm text-gray-500 italic">Loading available locations...</div>
-              )}
-              <div className="text-xs text-gray-500 mt-1">
-                {selectedLocations.length === 0 
-                  ? "If no locations are selected, we'll search across all major areas" 
-                  : `Searching in ${selectedLocations.length} location(s)`}
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="max-results">Maximum Results Per Location</Label>
+                <Select 
+                  disabled={isLoading}
+                  value={maxResults.toString()}
+                  onValueChange={(value) => setMaxResults(parseInt(value))}
+                >
+                  <SelectTrigger id="max-results">
+                    <SelectValue placeholder="Select max results" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10 results per location</SelectItem>
+                    <SelectItem value="25">25 results per location</SelectItem>
+                    <SelectItem value="50">50 results per location</SelectItem>
+                    <SelectItem value="100">100 results per location</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2 flex items-end">
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="decision-makers"
+                    checked={onlyDecisionMakers}
+                    onCheckedChange={(checked) => setOnlyDecisionMakers(!!checked)}
+                    disabled={isLoading}
+                  />
+                  <label 
+                    htmlFor="decision-makers"
+                    className="text-sm cursor-pointer leading-tight"
+                  >
+                    Only show decision makers
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Filter contacts to only include people with decision-making authority
+                    </p>
+                  </label>
+                </div>
               </div>
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="maxResults">Max results per location</Label>
-                <Input
-                  id="maxResults"
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={maxResults}
-                  onChange={(e) => setMaxResults(Number(e.target.value))}
-                  className="mt-1"
-                />
-              </div>
-              
-              <div className="flex items-center space-x-2 mt-8">
-                <Checkbox
-                  id="decisionMakers"
-                  checked={onlyDecisionMakers}
-                  onCheckedChange={(checked) => setOnlyDecisionMakers(!!checked)}
-                />
-                <Label htmlFor="decisionMakers">Only include decision makers</Label>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-        <CardFooter className="flex justify-between">
-          <Button onClick={handleSearch} disabled={isLoading}>
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Generating leads...
-              </>
-            ) : (
-              'Generate Leads'
-            )}
-          </Button>
-          
-          {results && (
-            <Button onClick={exportToCSV} variant="outline" disabled={isExporting}>
-              {isExporting ? (
+            <Button type="submit" disabled={isLoading} className="w-full">
+              {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Exporting...
+                  Searching...
                 </>
               ) : (
-                <>
-                  <Download className="mr-2 h-4 w-4" />
-                  Export to CSV
-                </>
+                "Search for Leads"
               )}
             </Button>
-          )}
-        </CardFooter>
+          </form>
+        </CardContent>
       </Card>
       
       {results && (
-        <Card className="w-full mt-6">
+        <Card className="mt-8 w-full">
           <CardHeader>
-            <CardTitle>Results</CardTitle>
+            <CardTitle>Search Results</CardTitle>
             <CardDescription>
-              Found {results.totalBusinesses} unique businesses with {results.totalContacts} contacts
-              across {results.totalLocations} locations.
+              Found {results.totalBusinesses} businesses with {results.totalContacts} contacts across {results.totalLocations} locations
             </CardDescription>
           </CardHeader>
+          
           <CardContent>
-            <h3 className="text-lg font-medium mb-2">Results by Location</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
-              {results.locationResults.map((result: any, index: number) => (
-                <div key={index} className="p-2 border rounded">
-                  <div className="font-medium">
-                    {result.location.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
-                  </div>
-                  <div className="text-sm">{result.businessCount} businesses</div>
+            <div className="space-y-4">
+              <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-2">
+                <div>
+                  <h3 className="text-lg font-medium">Search: "{searchTerm}"</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Locations: {selectedLocations.map(loc => 
+                      loc.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+                    ).join(', ')}
+                  </p>
                 </div>
-              ))}
-            </div>
-            
-            <h3 className="text-lg font-medium mt-4 mb-2">Business Results (First 10)</h3>
-            {results.businesses.length > 0 ? (
-              <div className="space-y-3">
-                {results.businesses.slice(0, 10).map((business: any, index: number) => (
-                  <div key={index} className="p-3 border rounded">
-                    <div className="font-bold">{business.name}</div>
-                    <div className="text-sm text-gray-600">{business.category}</div>
-                    <div className="text-sm">{business.address}</div>
-                    {business.contacts && business.contacts.length > 0 && (
-                      <div className="mt-2 p-2 bg-gray-50 rounded">
-                        <div className="text-sm font-medium">Primary Contact:</div>
-                        <div>
-                          {business.contacts[0].name} • {business.contacts[0].position}
-                        </div>
-                        <div className="text-sm">
-                          {business.contacts[0].email && (
-                            <span className="mr-2">{business.contacts[0].email}</span>
-                          )}
-                          {business.contacts[0].phoneNumber && (
-                            <span>{business.contacts[0].phoneNumber}</span>
-                          )}
-                        </div>
-                      </div>
-                    )}
+                
+                <Button 
+                  onClick={handleExport} 
+                  disabled={isExporting}
+                  className="w-full md:w-auto"
+                >
+                  {isExporting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Exporting...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="mr-2 h-4 w-4" />
+                      Export to CSV
+                    </>
+                  )}
+                </Button>
+              </div>
+              
+              {/* Location Results Summary */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {results.locationResults.map((locResult, index) => (
+                  <div key={index} className="p-4 border rounded-md">
+                    <h4 className="font-medium">
+                      {locResult.location.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    </h4>
+                    <p className="text-sm">
+                      {locResult.businessCount} businesses
+                    </p>
+                    <p className="text-sm">
+                      {locResult.contactCount} contacts
+                    </p>
                   </div>
                 ))}
               </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center p-6 text-center">
-                <SearchX className="h-12 w-12 text-gray-400" />
-                <h3 className="mt-2 text-lg font-medium">No results found</h3>
-                <p className="text-gray-500">
-                  Try adjusting your search terms or selecting different locations.
-                </p>
+              
+              {/* Business Results */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium">Businesses Found</h3>
+                
+                <div className="space-y-4">
+                  {results.businesses.slice(0, 20).map((business, index) => (
+                    <div key={index} className="p-4 border rounded-md space-y-2">
+                      <h4 className="font-medium">{business.name}</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                        <div>
+                          <p><strong>Category:</strong> {business.category}</p>
+                          <p><strong>Address:</strong> {business.address}</p>
+                        </div>
+                        <div>
+                          <p><strong>Phone:</strong> {business.phoneNumber}</p>
+                          <p><strong>Website:</strong> {business.website ? (
+                            <a href={business.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                              {business.website.replace(/^https?:\/\/(www\.)?/i, '')}
+                            </a>
+                          ) : 'N/A'}</p>
+                        </div>
+                      </div>
+                      
+                      {business.contacts && business.contacts.length > 0 ? (
+                        <div className="mt-3">
+                          <p className="font-medium">Contacts:</p>
+                          <div className="divide-y">
+                            {business.contacts.map((contact, contactIndex) => (
+                              <div key={contactIndex} className="py-2 text-sm">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
+                                  <p><strong>Name:</strong> {contact.name}</p>
+                                  <p><strong>Position:</strong> {contact.position}</p>
+                                  <p><strong>Email:</strong> {contact.email || 'N/A'}</p>
+                                  <p><strong>Phone:</strong> {contact.phoneNumber || 'N/A'}</p>
+                                </div>
+                                {contact.isDecisionMaker && (
+                                  <p className="mt-1 font-medium text-green-600">Decision Maker</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No contact information available</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                
+                {results.businesses.length > 20 && (
+                  <p className="text-center text-sm text-muted-foreground">
+                    Showing 20 of {results.businesses.length} businesses. Export to CSV to view all results.
+                  </p>
+                )}
               </div>
-            )}
-            
-            {results.businesses.length > 10 && (
-              <div className="mt-4 text-center text-gray-500">
-                {results.businesses.length - 10} more businesses not shown.
-                Export to CSV to see all results.
-              </div>
-            )}
+            </div>
           </CardContent>
+          
+          <CardFooter>
+            <p className="text-sm text-muted-foreground">
+              Data quality score: {Math.round(results.totalContacts / results.totalBusinesses * 10) / 10} contacts per business
+            </p>
+          </CardFooter>
         </Card>
+      )}
+      
+      {!isLoading && !results && (
+        <div className="mt-8 p-8 border rounded-md text-center">
+          <SearchX className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+          <h3 className="text-lg font-medium">No Search Results</h3>
+          <p className="text-muted-foreground">
+            Fill in the search form and click "Search for Leads" to find business contacts
+          </p>
+        </div>
       )}
     </div>
   );

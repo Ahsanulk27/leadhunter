@@ -471,6 +471,37 @@ export function registerBulkLeadRoutes(app: Express, googlePlacesService: Google
         filename = `nexlead_export_${timestamp}.csv`;
       }
       
+      // If this endpoint is accessed directly without proper parameters,
+      // provide a helpful response instead of an error
+      
+      // Set headers for CSV download
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="nexlead_instructions.csv"`);
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      
+      // Return a helpful CSV with instructions
+      return res.send(
+        'NexLead CSV Export Instructions\n' +
+        'Please use the export button in the application to download your leads.\n' +
+        'If you are seeing this message, it means you accessed the download link directly.\n' +
+        'Return to the application and use the "Export CSV" button after performing a search.'
+      );
+    } catch (error) {
+      console.error('Error in direct download route:', error);
+      res.status(500).send('An error occurred while preparing your download');
+    }
+  });
+  
+  // A separate endpoint that actually does database operations for CSV data
+  router.get('/download-by-id/:id', async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: 'Invalid ID format' });
+      }
+      
       // Get real businesses from the database - most recent search first
       let realBusinesses = [];
       
