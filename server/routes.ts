@@ -624,9 +624,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`🔍 [${executionId}] Executing real business search with Google Places API`);
       
-      // Search with Google Places API
+      // Search with Google Places API with increased limits
       const { googlePlacesService } = await import('./api/google-places-service');
-      const result = await googlePlacesService.searchBusinesses(query, location);
+      // Request up to 100 results for comprehensive data
+      const result = await googlePlacesService.searchBusinesses(query, location, 100);
       
       // Format the results in the expected ScrapingResult format
       const scrapingResult: ScrapingResult = {

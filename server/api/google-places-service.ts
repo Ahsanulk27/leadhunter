@@ -20,12 +20,61 @@ interface PlaceDetailsResult {
 
 export class GooglePlacesService {
   private apiKey: string;
+  // Track API usage
+  private apiCalls: {
+    timestamp: Date;
+    endpoint: string;
+    status: string;
+  }[] = [];
+  // Google Places API has a default quota of 1000 requests per day
+  private dailyQuota: number = 1000;
   
   constructor() {
     this.apiKey = process.env.GOOGLE_API_KEY || '';
     
     if (!this.apiKey) {
       console.error('⚠️ GooglePlacesService: No API key provided');
+    }
+  }
+  
+  /**
+   * Get the current Google API quota usage information
+   */
+  public getQuotaUsage() {
+    // Get calls in the last 24 hours
+    const oneDayAgo = new Date();
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+    
+    const recentCalls = this.apiCalls.filter(call => call.timestamp > oneDayAgo);
+    const successfulCalls = recentCalls.filter(call => call.status === 'OK');
+    
+    return {
+      total_calls_24h: recentCalls.length,
+      successful_calls_24h: successfulCalls.length,
+      quota_limit: this.dailyQuota,
+      quota_used_percent: (recentCalls.length / this.dailyQuota) * 100,
+      quota_remaining: this.dailyQuota - recentCalls.length,
+      latest_calls: recentCalls.slice(-10).map(call => ({
+        timestamp: call.timestamp.toISOString(),
+        endpoint: call.endpoint,
+        status: call.status
+      }))
+    };
+  }
+  
+  /**
+   * Track an API call for quota monitoring
+   */
+  private trackApiCall(endpoint: string, status: string) {
+    this.apiCalls.push({
+      timestamp: new Date(),
+      endpoint,
+      status
+    });
+    
+    // Keep only the last 1000 calls in memory to avoid memory leaks
+    if (this.apiCalls.length > 1000) {
+      this.apiCalls = this.apiCalls.slice(-1000);
     }
   }
   
@@ -64,6 +113,8 @@ export class GooglePlacesService {
       });
       
       let data: PlacesSearchResult = response.data;
+      // Track this API call
+      this.trackApiCall('textsearch', data.status);
       let allResults: any[] = [];
       let pageCount = 0;
       const MAX_PAGES = 3; // Limit to 3 pages of results to avoid rate limiting
@@ -126,6 +177,8 @@ export class GooglePlacesService {
           });
           
           data = response.data;
+          // Track this API call for pagination
+          this.trackApiCall('textsearch-pagination', data.status);
           
           if (data.status === 'OK' && data.results && data.results.length > 0) {
             // Check for duplicates before adding
@@ -228,6 +281,9 @@ export class GooglePlacesService {
       
       const data: PlaceDetailsResult = response.data;
       
+      // Track this details API call for quota monitoring
+      this.trackApiCall('placedetails', data.status);
+      
       if (data.status !== 'OK') {
         console.error(`❌ GooglePlacesService: Failed to get place details: ${data.status}`);
         return {};
@@ -236,6 +292,8 @@ export class GooglePlacesService {
       return data.result;
     } catch (error) {
       console.error(`❌ GooglePlacesService: Error getting place details:`, error);
+      // Track failed API call
+      this.trackApiCall('placedetails', 'ERROR');
       return {};
     }
   }
