@@ -98,7 +98,7 @@ export class GoogleMapsScraper {
     
     // Generate an execution ID if not provided
     if (!executionId) {
-      executionId = `search-${Date.now()}-${randomBytes(4).toString('hex')}`;
+      executionId = `search-gmaps-${Date.now()}-${randomBytes(4).toString('hex')}`;
     }
     
     // Initialize execution log if not provided
@@ -115,6 +115,8 @@ export class GoogleMapsScraper {
     
     console.log(`🔍 GoogleMapsScraper: Searching for "${searchQuery}"`);
     
+    // Puppeteer is the primary method for Google Maps, as their API requires billing
+    
     // Log this attempt
     const attemptLog = {
       source: 'google-maps',
@@ -127,53 +129,9 @@ export class GoogleMapsScraper {
     executionLog.scraping_attempts.push(attemptLog);
     
     try {
-      // First try using Puppeteer for the best results
-      const result = await this.searchWithPuppeteer(searchQuery, executionId, executionLog);
+      // Launch puppeteer and search Google Maps
+      const result = await this.searchWithPuppeteer(query, location, executionId, executionLog);
       attemptLog.status = 'success';
-      
-      if (result.businesses.length === 0) {
-        attemptLog.status = 'empty';
-        console.log(`⚠️ GoogleMapsScraper: No results found for "${searchQuery}" using Puppeteer`);
-        
-        // Try fallback method
-        console.log(`🔄 GoogleMapsScraper: Trying fallback method for "${searchQuery}"`);
-        const fallbackAttemptLog = {
-          source: 'google-maps',
-          timestamp: new Date().toISOString(),
-          query: searchQuery,
-          method: 'axios-fallback',
-          status: 'pending'
-        };
-        
-        executionLog.scraping_attempts.push(fallbackAttemptLog);
-        
-        try {
-          const fallbackResult = await this.searchWithAxios(searchQuery, executionId, executionLog);
-          fallbackAttemptLog.status = fallbackResult.businesses.length > 0 ? 'success' : 'empty';
-          executionLog.scraping_results.push({
-            source: 'google-maps-fallback',
-            timestamp: new Date().toISOString(),
-            count: fallbackResult.businesses.length,
-            execution_time_ms: Date.now() - executionStartTime,
-            first_result: fallbackResult.businesses[0] || null
-          });
-          
-          return fallbackResult;
-        } catch (fallbackError) {
-          fallbackAttemptLog.status = 'error';
-          executionLog.error_details.push({
-            source: 'google-maps-fallback',
-            timestamp: new Date().toISOString(),
-            error: (fallbackError as Error).message,
-            stack: (fallbackError as Error).stack
-          });
-          
-          console.error(`❌ GoogleMapsScraper fallback error:`, fallbackError);
-          
-          // If both methods fail, return empty array
-          return { businesses: [] };
-        }
-      }
       
       // Log successful result
       executionLog.scraping_results.push({
@@ -196,79 +154,8 @@ export class GoogleMapsScraper {
       
       console.error(`❌ GoogleMapsScraper error:`, error);
       
-      // Try fallback method
-      console.log(`🔄 GoogleMapsScraper: Trying fallback method for "${searchQuery}"`);
-      const fallbackAttemptLog = {
-        source: 'google-maps',
-        timestamp: new Date().toISOString(),
-        query: searchQuery,
-        method: 'axios-fallback',
-        status: 'pending'
-      };
-      
-      executionLog.scraping_attempts.push(fallbackAttemptLog);
-      
-      try {
-        const fallbackResult = await this.searchWithAxios(searchQuery, executionId, executionLog);
-        fallbackAttemptLog.status = fallbackResult.businesses.length > 0 ? 'success' : 'empty';
-        executionLog.scraping_results.push({
-          source: 'google-maps-fallback',
-          timestamp: new Date().toISOString(),
-          count: fallbackResult.businesses.length,
-          execution_time_ms: Date.now() - executionStartTime,
-          first_result: fallbackResult.businesses[0] || null
-        });
-        
-        return fallbackResult;
-      } catch (fallbackError) {
-        fallbackAttemptLog.status = 'error';
-        executionLog.error_details.push({
-          source: 'google-maps-fallback',
-          timestamp: new Date().toISOString(),
-          error: (fallbackError as Error).message,
-          stack: (fallbackError as Error).stack
-        });
-        
-        console.error(`❌ GoogleMapsScraper fallback error:`, fallbackError);
-        
-        // If both methods fail, return empty array
-        return { businesses: [] };
-      }
-    }
-  }
-
-  /**
-   * Get detailed information about a specific business on Google Maps
-   * @param businessName The name of the business
-   * @param location Optional location for more specific search
-   */
-  async getBusinessDetails(
-    businessName: string, 
-    location?: string,
-    executionId?: string,
-    executionLog?: any
-  ): Promise<BusinessData | null> {
-    console.log(`🔍 GoogleMapsScraper: Getting details for "${businessName}" ${location ? `in ${location}` : ''}`);
-    
-    try {
-      // First search for the business
-      const searchResult = await this.searchBusinesses(businessName, location, executionId, executionLog);
-      
-      if (searchResult.businesses.length === 0) {
-        console.log(`⚠️ GoogleMapsScraper: Business "${businessName}" not found`);
-        return null;
-      }
-      
-      // Find the most relevant result (usually the first one)
-      const business = searchResult.businesses.find(b => 
-        this.normalizeString(b.name).includes(this.normalizeString(businessName))
-      ) || searchResult.businesses[0];
-      
-      return business;
-      
-    } catch (error) {
-      console.error(`❌ GoogleMapsScraper error:`, error);
-      return null;
+      // Return empty businesses array on error
+      return { businesses: [] };
     }
   }
 
@@ -276,7 +163,8 @@ export class GoogleMapsScraper {
    * Search Google Maps using Puppeteer
    */
   private async searchWithPuppeteer(
-    searchQuery: string,
+    query: string,
+    location: string | undefined,
     executionId: string,
     executionLog: any
   ): Promise<{ businesses: BusinessData[], totalResults?: number }> {
@@ -287,12 +175,12 @@ export class GoogleMapsScraper {
     userAgent.lastUsed = new Date();
     userAgent.totalAttempts++;
     
-    // Log the user agent being used
-    console.log(`🔍 GoogleMapsScraper: Using user agent: ${userAgent.name} ${userAgent.version || ''} on ${userAgent.os || ''}`);
-    
     try {
-      const baseUrl = 'https://www.google.com/maps/search/';
-      const searchUrl = baseUrl + encodeURIComponent(searchQuery);
+      // Format the search query for Google Maps
+      const searchQuery = location ? `${query} ${location}` : query;
+      
+      // Construct the Google Maps URL 
+      const url = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
       
       // Log HTML snapshots to help with debugging
       const snapshotDir = path.join(this.logsDir, 'snapshots');
@@ -300,117 +188,111 @@ export class GoogleMapsScraper {
         fs.mkdirSync(snapshotDir, { recursive: true });
       }
       
-      const snapshotPath = path.join(snapshotDir, `google-maps-${executionId}.html`);
-      
       // Launch puppeteer with the selected user agent
       const page = await puppeteerWrapper.newPage(userAgent.userAgent);
       
       // Go to Google Maps search
-      await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+      console.log(`🌐 GoogleMapsScraper: Navigating to ${url}`);
+      await puppeteerWrapper.bypassProtection(page, url);
       
-      // Save a snapshot of the HTML for debugging
+      // Wait for search results to load - look for business listings
+      const businessListingSelector = 'div[role="feed"] > div';
+      await page.waitForSelector(businessListingSelector, { timeout: 30000 });
+      
+      // Give results time to fully load
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // Take a screenshot for debugging
+      const screenshotPath = path.join(snapshotDir, `gmaps-screenshot-${executionId}.png`);
+      await page.screenshot({ path: screenshotPath, fullPage: true });
+      
+      // Save HTML snapshot for debugging
       const html = await page.content();
+      const snapshotPath = path.join(snapshotDir, `gmaps-html-${executionId}.html`);
       fs.writeFileSync(snapshotPath, html);
       
-      // Wait for search results to load
-      await page.waitForSelector('div[role="article"]', { timeout: 15000 });
+      // Scroll to load more results
+      console.log(`🌐 GoogleMapsScraper: Scrolling to load more results`);
+      await this.scrollToLoadMore(page, 3); // Scroll 3 times to load more results
       
       // Extract business data
+      console.log(`🌐 GoogleMapsScraper: Extracting business data from results`);
       const businesses = await page.evaluate(() => {
         const results: any[] = [];
-        const items = document.querySelectorAll('div[role="article"]');
         
-        items.forEach(item => {
+        // Find all business listings
+        const businessListings = document.querySelectorAll('div[role="feed"] > div');
+        
+        // Process each listing
+        businessListings.forEach(listing => {
           try {
-            const nameElement = item.querySelector('a[aria-label]');
-            const name = nameElement?.textContent?.trim() || '';
-            const href = nameElement?.getAttribute('href') || '';
+            // Get business name
+            const nameEl = listing.querySelector('a[aria-label]');
+            if (!nameEl) return; // Skip if no name element (probably not a business listing)
             
-            // Extract place_id from the URL if available
-            let placeId = null;
-            if (href) {
-              const match = href.match(/data=.*!1s([^!]+)/);
-              if (match && match[1]) {
-                placeId = match[1];
-              }
-            }
+            const name = nameEl.textContent?.trim() || '';
+            const googleUrl = nameEl.getAttribute('href') || '';
+            if (!name || !googleUrl) return; // Skip if missing critical information
             
-            // Extract address and other details
-            const details = Array.from(item.querySelectorAll('div[role="img"]'));
-            let address = '';
-            let phoneNumber = '';
-            let website = '';
-            let category = '';
+            // Get address
+            const addressEl = listing.querySelector('.fontBodyMedium [aria-label] span');
+            const address = addressEl?.textContent?.trim() || '';
             
-            details.forEach(detail => {
-              const text = detail.getAttribute('aria-label') || '';
-              if (text.includes('Address:')) {
-                address = text.replace('Address:', '').trim();
-              } else if (text.includes('Phone:')) {
-                phoneNumber = text.replace('Phone:', '').trim();
-              } else if (text.includes('Website:')) {
-                website = text.replace('Website:', '').trim();
-              }
-            });
+            // Get rating
+            const ratingText = listing.querySelector('span[aria-label]');
+            const ratingMatch = ratingText?.getAttribute('aria-label')?.match(/([\d.]+) stars/);
+            const rating = ratingMatch ? parseFloat(ratingMatch[1]) : 0;
             
-            // Try to get the category
-            const categoryElem = item.querySelector('div:nth-child(3) > div:nth-child(2) > div');
-            if (categoryElem) {
-              category = categoryElem.textContent?.trim() || '';
-            }
+            // Get business type/category
+            const typeEl = listing.querySelector('.fontBodyMedium span:nth-child(1)');
+            const businessType = typeEl?.textContent?.trim() || '';
             
-            // Parse rating and reviews if available
-            const ratingText = item.querySelector('span[role="img"]')?.getAttribute('aria-label') || '';
-            let rating = 0;
-            let reviewCount = 0;
+            // Get review count
+            const reviewContainer = listing.querySelector('.fontBodyMedium:nth-child(2)');
+            const reviewText = reviewContainer?.textContent || '';
+            const reviewMatch = reviewText.match(/(\d+)/);
+            const reviewCount = reviewMatch ? parseInt(reviewMatch[1], 10) : 0;
             
-            if (ratingText) {
-              const ratingMatch = ratingText.match(/([\d.]+) stars/);
-              if (ratingMatch) {
-                rating = parseFloat(ratingMatch[1]);
-              }
-              
-              const reviewMatch = ratingText.match(/([\d,]+) reviews/);
-              if (reviewMatch) {
-                reviewCount = parseInt(reviewMatch[1].replace(/,/g, ''), 10);
-              }
-            }
-            
+            // Add to results
             results.push({
               name,
               address,
-              phoneNumber,
-              website,
-              category,
+              googleUrl,
               rating,
-              reviewCount,
-              place_id: placeId
+              businessType,
+              reviewCount
             });
-          } catch (error) {
-            console.error('Error parsing business data:', error);
+          } catch (e) {
+            // Skip any listing that causes errors during extraction
+            console.error("Error extracting business listing:", e);
           }
         });
         
         return results;
       });
       
-      // Format and return data
-      const formattedBusinesses: BusinessData[] = businesses.map(business => {
-        return {
-          name: business.name,
-          address: business.address,
-          phoneNumber: business.phoneNumber,
-          website: business.website || '',
-          industry: business.category || '',
-          location: business.address, // Use address as location
-          size: 'Unknown', // Size information isn't typically available on Google Maps
-          contacts: [], // We'll need to extract contacts separately
-          place_id: business.place_id,
-          data_source: 'google-maps',
-          data_source_url: `https://www.google.com/maps/place/?q=place_id:${business.place_id}`,
-          extraction_date: new Date().toISOString()
-        };
-      });
+      // Close the page when done
+      await page.close();
+      
+      console.log(`🌐 GoogleMapsScraper: Extracted ${businesses.length} businesses`);
+      
+      // Format the data
+      const formattedBusinesses: BusinessData[] = businesses.map(b => ({
+        name: b.name,
+        address: b.address,
+        phoneNumber: '', // Not directly available from search results
+        website: '', // Not directly available from search results
+        industry: b.businessType,
+        location: b.address || (location || ''),
+        size: 'Unknown',
+        contacts: [],
+        data_source: 'google-maps',
+        data_source_url: b.googleUrl,
+        extraction_date: new Date().toISOString(),
+        place_id: this.extractPlaceIdFromUrl(b.googleUrl),
+        google_rating: b.rating,
+        review_count: b.reviewCount
+      }));
       
       // Update user agent success rate
       userAgent.successRate = ((userAgent.successRate * (userAgent.totalAttempts - 1)) + 1) / userAgent.totalAttempts;
@@ -418,7 +300,7 @@ export class GoogleMapsScraper {
       return { businesses: formattedBusinesses };
       
     } catch (error) {
-      // Update user agent success rate on failure
+      // Update user agent success rate
       userAgent.successRate = ((userAgent.successRate * (userAgent.totalAttempts - 1)) + 0) / userAgent.totalAttempts;
       
       // Log detailed error for later analysis
@@ -432,137 +314,206 @@ export class GoogleMapsScraper {
       
       executionLog.error_details.push(errorLog);
       
-      console.error(`❌ GoogleMapsScraper Puppeteer error: ${(error as Error).message}`);
+      console.error(`❌ GoogleMapsScraper error: ${(error as Error).message}`);
       throw error;
     }
   }
 
   /**
-   * Search Google Maps using Axios (as a fallback method)
+   * Scroll down to load more results in Google Maps
    */
-  private async searchWithAxios(
-    searchQuery: string,
-    executionId: string,
-    executionLog: any
-  ): Promise<{ businesses: BusinessData[], totalResults?: number }> {
-    // Select a good user agent
-    const userAgent = this.selectBestUserAgent();
+  private async scrollToLoadMore(page: any, times: number = 3): Promise<void> {
+    const resultsContainerSelector = 'div[role="feed"]';
     
-    // Update the user agent's stats
-    userAgent.lastUsed = new Date();
-    userAgent.totalAttempts++;
+    for (let i = 0; i < times; i++) {
+      await page.evaluate((selector: string) => {
+        const container = document.querySelector(selector);
+        if (container) {
+          container.scrollTop = container.scrollHeight;
+        }
+      }, resultsContainerSelector);
+      
+      // Wait for new results to load
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
+
+  /**
+   * Extract Google Place ID from URL
+   */
+  private extractPlaceIdFromUrl(url: string): string {
+    try {
+      const match = url.match(/places?\/([^\/]+)/);
+      return match ? match[1] : '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  /**
+   * Get detailed information about a specific business by Place ID
+   */
+  async getBusinessDetailsByPlaceId(
+    placeId: string,
+    executionId?: string,
+    executionLog?: any
+  ): Promise<BusinessData | null> {
+    if (!executionId) {
+      executionId = `detail-gmaps-${Date.now()}-${randomBytes(4).toString('hex')}`;
+    }
     
-    // Log the user agent being used
-    console.log(`🔍 GoogleMapsScraper (Axios): Using user agent: ${userAgent.name} ${userAgent.version || ''} on ${userAgent.os || ''}`);
+    if (!executionLog) {
+      executionLog = {
+        execution_id: executionId,
+        timestamp: new Date().toISOString(),
+        query_params: { placeId },
+        scraping_attempts: [],
+        scraping_results: [],
+        error_details: []
+      };
+    }
+    
+    console.log(`🔍 GoogleMapsScraper: Getting details for place ID "${placeId}"`);
     
     try {
-      const baseUrl = 'https://www.google.com/maps/search/';
-      const searchUrl = baseUrl + encodeURIComponent(searchQuery);
+      // Construct URL for the specific place
+      const url = `https://www.google.com/maps/place/?q=place_id:${placeId}`;
       
-      // Log HTML snapshots to help with debugging
-      const snapshotDir = path.join(this.logsDir, 'snapshots');
-      if (!fs.existsSync(snapshotDir)) {
-        fs.mkdirSync(snapshotDir, { recursive: true });
-      }
+      // Select a good user agent
+      const userAgent = this.selectBestUserAgent();
       
-      const snapshotPath = path.join(snapshotDir, `google-maps-axios-${executionId}.html`);
+      // Update the user agent's stats
+      userAgent.lastUsed = new Date();
+      userAgent.totalAttempts++;
       
-      // Make the HTTP request with axios
-      const response = await axios.get(searchUrl, {
-        headers: {
-          'User-Agent': userAgent.userAgent,
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1',
-          'Sec-Fetch-Dest': 'document',
-          'Sec-Fetch-Mode': 'navigate',
-          'Sec-Fetch-Site': 'none',
-          'Sec-Fetch-User': '?1',
-          'TE': 'trailers'
-        },
-        timeout: 30000
-      });
+      // Launch puppeteer with the selected user agent
+      const page = await puppeteerWrapper.newPage(userAgent.userAgent);
       
-      // Save HTML snapshot for debugging
-      fs.writeFileSync(snapshotPath, response.data);
+      // Go to Google Maps place page
+      await puppeteerWrapper.bypassProtection(page, url);
       
-      // Parse HTML with cheerio
-      const $ = cheerio.load(response.data);
-      const businesses: BusinessData[] = [];
+      // Wait for place details to load
+      await page.waitForSelector('h1', { timeout: 30000 });
       
-      // Check if we've been blocked by anti-scraping
-      if (response.data.includes('challenge-running') || response.data.includes('captcha') || 
-          response.data.includes('detected unusual traffic') || response.data.includes('security check')) {
-        console.warn('⚠️ GoogleMapsScraper: Detected anti-scraping measures on Google Maps. Try another method or user agent.');
+      // Take a screenshot for debugging
+      const screenshotPath = path.join(this.logsDir, `gmaps-detail-${executionId}.png`);
+      await page.screenshot({ path: screenshotPath, fullPage: true });
+      
+      // Extract business data
+      const business = await page.evaluate(() => {
+        // Helper function to safely get text content
+        const getText = (selector: string): string => {
+          const element = document.querySelector(selector);
+          return element ? element.textContent?.trim() || '' : '';
+        };
         
-        // Update user agent success rate
-        userAgent.successRate = ((userAgent.successRate * (userAgent.totalAttempts - 1)) + 0) / userAgent.totalAttempts;
+        // Get business name
+        const name = getText('h1');
         
-        executionLog.error_details.push({
-          source: 'google-maps-axios',
-          timestamp: new Date().toISOString(),
-          error: 'Anti-scraping measures detected',
-          user_agent: userAgent.userAgent,
-          html_snapshot: snapshotPath
+        // Get address, phone, website
+        let address = '';
+        let phoneNumber = '';
+        let website = '';
+        
+        // Find contact details
+        const buttons = document.querySelectorAll('button[data-item-id]');
+        buttons.forEach(button => {
+          const dataItemId = button.getAttribute('data-item-id');
+          const text = button.textContent || '';
+          
+          if (dataItemId === 'address') {
+            address = text.trim();
+          } else if (dataItemId === 'phone') {
+            phoneNumber = text.trim();
+          } else if (dataItemId === 'authority') {
+            website = button.getAttribute('aria-label') || '';
+            if (website.includes('Visit')) {
+              website = website.replace('Visit', '').trim();
+            }
+          }
         });
         
-        return { businesses: [] };
-      }
-      
-      // Find business listings in the HTML
-      // This is a simplified approach and might need adjustments based on the actual HTML structure
-      $('div[role="article"], .section-result, .map-place-card').each((i, element) => {
-        try {
-          const name = $(element).find('h3, .section-result-title, .place-name').first().text().trim();
-          const address = $(element).find('.section-result-location, .place-address').text().trim();
-          const phoneNumber = $(element).find('[data-tooltip="Copy phone number"]').text().trim();
-          
-          // Only add if we have a valid name
-          if (name) {
-            businesses.push({
-              name,
-              address,
-              phoneNumber,
-              website: '',
-              industry: '',
-              location: address,
-              size: 'Unknown',
-              contacts: [],
-              data_source: 'google-maps-fallback',
-              data_source_url: searchUrl,
-              extraction_date: new Date().toISOString()
-            });
+        // Get categories/industry
+        const categories: string[] = [];
+        document.querySelectorAll('button[jsaction="pane.rating.category"]').forEach(el => {
+          const category = el.textContent?.trim();
+          if (category) {
+            categories.push(category);
           }
-        } catch (err) {
-          console.error('Error parsing business element:', err);
-        }
+        });
+        
+        // Get rating
+        const ratingText = getText('div[role="img"][aria-label*="stars"]');
+        const ratingMatch = ratingText ? ratingText.match(/([\d.]+) stars/) : null;
+        const rating = ratingMatch ? parseFloat(ratingMatch[1]) : 0;
+        
+        // Get review count
+        const reviewText = getText('button[jsaction*="pane.rating.moreReviews"]');
+        const reviewMatch = reviewText ? reviewText.match(/(\d+)/) : null;
+        const reviewCount = reviewMatch ? parseInt(reviewMatch[1], 10) : 0;
+        
+        // Extract business hours if available
+        const hours: string[] = [];
+        document.querySelectorAll('div[aria-label^="Hours"] tr').forEach(row => {
+          const day = row.querySelector('th')?.textContent?.trim();
+          const time = row.querySelector('td')?.textContent?.trim();
+          if (day && time) {
+            hours.push(`${day} ${time}`);
+          }
+        });
+        
+        return {
+          name,
+          address,
+          phoneNumber,
+          website,
+          categories: categories.join(', '),
+          rating,
+          reviewCount,
+          hours: hours.join('; ')
+        };
       });
       
-      // Update user agent success rate based on results
-      const success = businesses.length > 0 ? 1 : 0;
-      userAgent.successRate = ((userAgent.successRate * (userAgent.totalAttempts - 1)) + success) / userAgent.totalAttempts;
+      // Close the page when done
+      await page.close();
       
-      return { businesses };
-      
-    } catch (error) {
-      // Update user agent success rate on failure
-      userAgent.successRate = ((userAgent.successRate * (userAgent.totalAttempts - 1)) + 0) / userAgent.totalAttempts;
-      
-      // Log detailed error for later analysis
-      const errorLog = {
-        source: 'google-maps-axios',
-        timestamp: new Date().toISOString(),
-        user_agent: userAgent.userAgent,
-        error: (error as Error).message,
-        stack: (error as Error).stack
+      // Format the business data
+      const formattedBusiness: BusinessData = {
+        name: business.name,
+        address: business.address,
+        phoneNumber: business.phoneNumber,
+        website: business.website,
+        industry: business.categories,
+        location: business.address,
+        size: 'Unknown',
+        contacts: [], // No contact information available directly from Google Maps
+        data_source: 'google-maps-detail',
+        data_source_url: url,
+        extraction_date: new Date().toISOString(),
+        place_id: placeId,
+        google_rating: business.rating,
+        review_count: business.reviewCount
       };
       
-      executionLog.error_details.push(errorLog);
+      // Update user agent success rate
+      userAgent.successRate = ((userAgent.successRate * (userAgent.totalAttempts - 1)) + 1) / userAgent.totalAttempts;
       
-      console.error(`❌ GoogleMapsScraper Axios error: ${(error as Error).message}`);
-      throw error;
+      return formattedBusiness;
+      
+    } catch (error) {
+      console.error(`❌ GoogleMapsScraper detail error:`, error);
+      
+      // Log the error for analysis
+      if (executionLog) {
+        executionLog.error_details.push({
+          source: 'google-maps-detail',
+          timestamp: new Date().toISOString(),
+          error: (error as Error).message,
+          stack: (error as Error).stack
+        });
+      }
+      
+      return null;
     }
   }
 
@@ -583,13 +534,6 @@ export class GoogleMapsScraper {
     
     // Choose the best agent
     return sortedAgents[0];
-  }
-
-  /**
-   * Helper function to normalize strings for comparison
-   */
-  private normalizeString(str: string): string {
-    return str.toLowerCase().replace(/[^a-z0-9]/g, '');
   }
 }
 

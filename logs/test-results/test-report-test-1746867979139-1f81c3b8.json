@@ -1,0 +1,35 @@
+{
+  "execution_id": "test-1746867979139-1f81c3b8",
+  "timestamp": "2025-05-10T09:06:19.139Z",
+  "tests": [
+    {
+      "test_name": "Property Management in Los Angeles",
+      "industry": "Property Management",
+      "location": "Los Angeles",
+      "status": "failed",
+      "execution_id": "test-1746867979139-1f81c3b8-property-management-in-los-angeles",
+      "timestamp": "2025-05-10T09:06:19.139Z",
+      "businesses_found": 0,
+      "execution_time_ms": 162,
+      "log_file": "/home/runner/workspace/logs/test-results/test-test-1746867979139-1f81c3b8-property-management-in-los-angeles.json",
+      "error": "No businesses found",
+      "passed": false
+    },
+    {
+      "test_name": "Plumbers in New York",
+      "industry": "Plumbers",
+      "location": "New York",
+      "status": "failed",
+      "execution_id": "test-1746867979139-1f81c3b8-plumbers-in-new-york",
+      "timestamp": "2025-05-10T09:06:19.302Z",
+      "businesses_found": 0,
+      "execution_time_ms": 36,
+      "log_file": "/home/runner/workspace/logs/test-results/test-test-1746867979139-1f81c3b8-plumbers-in-new-york.json",
+      "error": "No businesses found",
+      "passed": false
+    }
+  ],
+  "passed_tests": 0,
+  "total_tests": 2,
+  "success_rate": 0
+}

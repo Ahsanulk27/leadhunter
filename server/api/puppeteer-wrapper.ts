@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomBytes } from 'crypto';
 
+// Define interface for managing browser instances
 interface BrowserInstance {
   browser: puppeteer.Browser;
   pages: Set<puppeteer.Page>;
@@ -28,8 +29,10 @@ export class PuppeteerWrapper {
       fs.mkdirSync(this.logsDir, { recursive: true });
     }
     
-    // Set up a cleanup interval to manage browser instances
-    setInterval(() => this.cleanupBrowsers(), 5 * 60 * 1000); // Check every 5 minutes
+    // Schedule browser cleanup to run every 5 minutes
+    setInterval(() => {
+      this.cleanupBrowsers();
+    }, 5 * 60 * 1000);
   }
   
   /**
@@ -37,47 +40,60 @@ export class PuppeteerWrapper {
    */
   async createBrowser(userAgent?: string): Promise<BrowserInstance> {
     try {
-      // Clean up old browsers if we're at capacity
-      if (this.browsers.size >= this.maxBrowsers) {
-        this.cleanupOldestBrowser();
-      }
+      // Generate a random identifier for this browser instance
+      const id = `browser-${Date.now()}-${randomBytes(4).toString('hex')}`;
       
-      // Launch browser with stealth settings
+      // Generate random viewport dimensions to vary fingerprint
+      const width = 1366 + Math.floor(Math.random() * 300);
+      const height = 768 + Math.floor(Math.random() * 200);
+      
+      console.log(`🌐 PuppeteerWrapper: Creating new browser (ID: ${id})`);
+      
+      // Launch a new browser with stealth mode settings
       const browser = await puppeteer.launch({
+        headless: 'new', // Use the new headless mode
         args: [
           '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-infobars',
-          '--window-position=0,0',
-          '--ignore-certificate-errors',
-          '--ignore-certificate-errors-spki-list',
-          '--disable-extensions',
-          '--disable-dev-shm-usage'
+          '--disable-setuid-sandbox', 
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--disable-gpu',
+          '--disable-web-security',
+          `--window-size=${width},${height}`,
+          '--disable-features=IsolateOrigins,site-per-process',
+          '--blink-settings=imagesEnabled=true'
         ],
+        ignoreHTTPSErrors: true,
         defaultViewport: {
-          width: 1366,
-          height: 768
-        },
-        headless: true
+          width,
+          height,
+          deviceScaleFactor: Math.random() < 0.5 ? 1 : 2,
+          hasTouch: Math.random() < 0.2,
+          isLandscape: Math.random() < 0.9,
+          isMobile: Math.random() < 0.1
+        }
       });
       
-      // Track the browser instance
-      const browserId = `browser-${Date.now()}-${randomBytes(4).toString('hex')}`;
+      // Create a browser instance object to track this browser
       const instance: BrowserInstance = {
         browser,
         pages: new Set(),
         lastUsed: new Date(),
         userAgent,
-        id: browserId
+        id
       };
       
-      this.browsers.set(browserId, instance);
+      // Store the instance in our map
+      this.browsers.set(id, instance);
       
-      console.log(`🔧 PuppeteerWrapper: Created new browser instance ${browserId}`);
+      // Clean up old browsers if we have too many
+      if (this.browsers.size > this.maxBrowsers) {
+        await this.cleanupOldestBrowser();
+      }
       
       return instance;
     } catch (error) {
-      console.error('❌ Error creating browser:', error);
+      console.error('❌ PuppeteerWrapper: Error creating browser:', error);
       throw error;
     }
   }
@@ -86,30 +102,17 @@ export class PuppeteerWrapper {
    * Get an existing browser or create a new one
    */
   async getBrowser(userAgent?: string): Promise<BrowserInstance> {
-    let bestMatch: BrowserInstance | null = null;
-    
-    // Try to find an existing browser with matching userAgent
-    if (userAgent) {
-      for (const instance of this.browsers.values()) {
-        if (instance.userAgent === userAgent) {
-          bestMatch = instance;
-          break;
-        }
+    // Look for existing browser with the same user agent
+    for (const instance of this.browsers.values()) {
+      if ((!userAgent && !instance.userAgent) || 
+          (userAgent && instance.userAgent === userAgent)) {
+        // Update last used time
+        instance.lastUsed = new Date();
+        return instance;
       }
     }
     
-    // If no matching browser, choose any available browser
-    if (!bestMatch && this.browsers.size > 0) {
-      bestMatch = Array.from(this.browsers.values())[0];
-    }
-    
-    // If we found a suitable browser, update its last used time
-    if (bestMatch) {
-      bestMatch.lastUsed = new Date();
-      return bestMatch;
-    }
-    
-    // Otherwise create a new browser
+    // No matching browser found, create a new one
     return this.createBrowser(userAgent);
   }
   
@@ -118,7 +121,10 @@ export class PuppeteerWrapper {
    */
   async newPage(userAgent?: string): Promise<puppeteer.Page> {
     try {
+      // Get or create a browser instance
       const instance = await this.getBrowser(userAgent);
+      
+      // Create a new page
       const page = await instance.browser.newPage();
       
       // Set user agent if provided
@@ -126,20 +132,23 @@ export class PuppeteerWrapper {
         await page.setUserAgent(userAgent);
       }
       
-      // Apply anti-detection measures
+      // Apply stealth mode settings
       await this.applyStealthMode(page);
       
-      // Track the page in the browser instance
+      // Add this page to the tracked pages for this browser
       instance.pages.add(page);
       
-      // Set up cleanup when page closes
+      // Update last used time for this browser
+      instance.lastUsed = new Date();
+      
+      // When the page is closed, remove it from our set
       page.once('close', () => {
         instance.pages.delete(page);
       });
       
       return page;
     } catch (error) {
-      console.error('❌ Error creating page:', error);
+      console.error('❌ PuppeteerWrapper: Error creating page:', error);
       throw error;
     }
   }
@@ -148,69 +157,151 @@ export class PuppeteerWrapper {
    * Apply stealth mode settings to avoid detection
    */
   private async applyStealthMode(page: puppeteer.Page): Promise<void> {
-    // Randomize WebGL details to avoid fingerprinting
-    await page.evaluateOnNewDocument(() => {
-      // Override WebGL fingerprinting
-      const getParameterProto = WebGLRenderingContext.prototype.getParameter;
-      WebGLRenderingContext.prototype.getParameter = function(parameter) {
-        // UNMASKED_VENDOR_WEBGL
-        if (parameter === 37445) {
-          return 'Intel Open Source Technology Center';
+    try {
+      // Randomize some WebGL fingerprinting data
+      await page.evaluateOnNewDocument(() => {
+        // Canvas fingerprint randomization
+        const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+        const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+        
+        HTMLCanvasElement.prototype.toDataURL = function(type) {
+          if (type === 'image/png' && this.width === 16 && this.height === 16) {
+            // This is likely a fingerprint attempt, return a slightly different value
+            const noise = Math.floor(Math.random() * 10) - 5;
+            // Call the original, but add some noise to the output
+            const dataURL = originalToDataURL.apply(this, [type]);
+            return dataURL.replace(/.$/, (parseInt(dataURL.slice(-1), 36) + noise).toString(36));
+          }
+          return originalToDataURL.apply(this, arguments);
+        };
+        
+        CanvasRenderingContext2D.prototype.getImageData = function(sx, sy, sw, sh) {
+          const imageData = originalGetImageData.apply(this, [sx, sy, sw, sh]);
+          
+          // Add slight random noise to fingerprinting attempts
+          if ((sw === 16 && sh === 16) || // Common fingerprinting size
+              (sw === 200 && sh === 50)) { // Another common fingerprinting size
+            for (let i = 0; i < imageData.data.length; i += 4) {
+              if (Math.random() < 0.01) { // Only modify some pixels
+                const noise = Math.floor(Math.random() * 4) - 2;
+                imageData.data[i] = Math.max(0, Math.min(255, imageData.data[i] + noise));
+                imageData.data[i+1] = Math.max(0, Math.min(255, imageData.data[i+1] + noise));
+                imageData.data[i+2] = Math.max(0, Math.min(255, imageData.data[i+2] + noise));
+              }
+            }
+          }
+          
+          return imageData;
+        };
+        
+        // Override navigator properties
+        const originalNavigator = window.navigator;
+        
+        // Override navigator permissions API
+        const originalPermissions = navigator.permissions;
+        if (originalPermissions) {
+          navigator.permissions.query = async (parameters) => {
+            if (parameters.name === 'notifications' || 
+                parameters.name === 'clipboard-read' || 
+                parameters.name === 'clipboard-write') {
+              return { state: 'prompt', onchange: null };
+            }
+            
+            // Fall back to original behavior
+            // @ts-ignore
+            return originalPermissions.query(parameters);
+          };
         }
-        // UNMASKED_RENDERER_WEBGL
-        if (parameter === 37446) {
-          return 'Mesa DRI Intel(R) Iris(TM) Plus Graphics (ICL GT2)';
-        }
-        return getParameterProto.call(this, parameter);
-      };
-      
-      // Override navigator properties
-      const createGetter = (prop: string, value: any) => {
-        Object.defineProperty(navigator, prop, {
-          get: () => value
+        
+        // Override navigator plugins and MIME types
+        Object.defineProperty(Navigator.prototype, 'plugins', {
+          get: () => {
+            // Return a non-empty array of plugins
+            const fakePlugins = {
+              length: 3,
+              item: (index: number) => fakePlugins[index],
+              0: {
+                name: 'Chrome PDF Viewer',
+                filename: 'internal-pdf-viewer',
+                description: 'Portable Document Format'
+              },
+              1: {
+                name: 'Chrome PDF Plugin',
+                filename: 'internal-pdf-plugin',
+                description: 'Portable Document Format'
+              },
+              2: {
+                name: 'Native Client',
+                filename: 'internal-nacl-plugin',
+                description: 'Native Client Executable'
+              }
+            };
+            return fakePlugins;
+          }
         });
-      };
-      
-      // Modify navigator properties to appear more like a regular browser
-      createGetter('webdriver', false);
-      createGetter('plugins', {
-        length: 3,
-        refresh: () => {},
-        item: (i: number) => ({name: `Plugin ${i}`, filename: `plugin-${i}.dll`})
+        
+        // Override webdriver property
+        Object.defineProperty(navigator, 'webdriver', {
+          get: () => false
+        });
+        
+        // Override language properties with realistic values
+        Object.defineProperty(navigator, 'language', {
+          get: () => 'en-US'
+        });
+        
+        Object.defineProperty(navigator, 'languages', {
+          get: () => ['en-US', 'en', 'es']
+        });
+        
+        // Override hardware concurrency (CPU cores)
+        Object.defineProperty(navigator, 'hardwareConcurrency', {
+          get: () => 8
+        });
+        
+        // Override device memory
+        Object.defineProperty(navigator, 'deviceMemory', {
+          get: () => 8
+        });
       });
       
-      // Try to prevent detection of automation
-      createGetter('languages', ['en-US', 'en']);
-      
-      // Override the permissions API
-      const permissionsProto = Permissions.prototype;
-      const oldQuery = permissionsProto.query;
-      permissionsProto.query = function(parameters) {
-        return Promise.resolve({state: 'prompt', onchange: null});
+      // Set default headers to mimic a real browser
+      const headers = {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Upgrade-Insecure-Requests': '1'
       };
-    });
-    
-    // Set default browser viewport
-    await page.setViewport({
-      width: 1366,
-      height: 768,
-      deviceScaleFactor: 1,
-    });
-    
-    // Set tracking/privacy settings
-    await page.evaluateOnNewDocument(() => {
-      // Set browser details that might be used for fingerprinting
-      Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
-      Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
-      Object.defineProperty(navigator, 'connection', { 
-        get: () => ({
-          effectiveType: '4g',
-          rtt: 50,
-          downlink: 10.0,
-          saveData: false
-        })
+      
+      await page.setExtraHTTPHeaders(headers);
+      
+      // Set realistic viewport if not already set
+      const viewport = page.viewport();
+      if (!viewport) {
+        await page.setViewport({
+          width: 1366 + Math.floor(Math.random() * 300),
+          height: 768 + Math.floor(Math.random() * 200),
+          deviceScaleFactor: Math.random() < 0.5 ? 1 : 2
+        });
+      }
+      
+      // Disable features that make automation detectable
+      await page.evaluateOnNewDocument(() => {
+        // Remove webdriver flag
+        delete (window as any).navigator.__proto__.webdriver;
+        
+        // Fake webRTC stack
+        Object.defineProperty(navigator, 'mediaDevices', {
+          get: () => undefined
+        });
+        
+        // Remove Chrome automation flag
+        delete (window as any).chrome;
       });
-    });
+      
+    } catch (error) {
+      console.error('❌ PuppeteerWrapper: Error applying stealth mode:', error);
+    }
   }
   
   /**
@@ -223,10 +314,10 @@ export class PuppeteerWrapper {
     }
     
     const filename = `${name}-${Date.now()}.png`;
-    const filePath = path.join(screenshotDir, filename);
+    const filepath = path.join(screenshotDir, filename);
     
-    await page.screenshot({ path: filePath, fullPage: true });
-    return filePath;
+    await page.screenshot({ path: filepath, fullPage: true });
+    return filepath;
   }
   
   /**
@@ -235,15 +326,13 @@ export class PuppeteerWrapper {
   async closeBrowser(browserId: string): Promise<void> {
     const instance = this.browsers.get(browserId);
     if (instance) {
+      console.log(`🌐 PuppeteerWrapper: Closing browser (ID: ${browserId})`);
       try {
         await instance.browser.close();
-        this.browsers.delete(browserId);
-        console.log(`🔧 PuppeteerWrapper: Closed browser instance ${browserId}`);
       } catch (error) {
-        console.error(`❌ Error closing browser ${browserId}:`, error);
-        // Clean up the instance even if there was an error
-        this.browsers.delete(browserId);
+        console.error(`❌ PuppeteerWrapper: Error closing browser ${browserId}:`, error);
       }
+      this.browsers.delete(browserId);
     }
   }
   
@@ -251,22 +340,17 @@ export class PuppeteerWrapper {
    * Clean up browser instances that have been running for too long
    */
   private async cleanupBrowsers(): Promise<void> {
-    const now = new Date();
-    const browsersToClose: string[] = [];
+    console.log(`🌐 PuppeteerWrapper: Checking for browsers to cleanup (current count: ${this.browsers.size})`);
+    
+    const now = new Date().getTime();
     
     for (const [id, instance] of this.browsers.entries()) {
-      const age = now.getTime() - instance.lastUsed.getTime();
-      if (age > this.browserLifetime) {
-        browsersToClose.push(id);
+      const browserAge = now - instance.lastUsed.getTime();
+      
+      if (browserAge > this.browserLifetime) {
+        console.log(`🌐 PuppeteerWrapper: Closing old browser (ID: ${id}, age: ${browserAge / 1000}s)`);
+        await this.closeBrowser(id);
       }
-    }
-    
-    for (const id of browsersToClose) {
-      await this.closeBrowser(id);
-    }
-    
-    if (browsersToClose.length > 0) {
-      console.log(`🧹 PuppeteerWrapper: Cleaned up ${browsersToClose.length} browser instances`);
     }
   }
   
@@ -274,8 +358,6 @@ export class PuppeteerWrapper {
    * Close the oldest browser instance to make room for new ones
    */
   private async cleanupOldestBrowser(): Promise<void> {
-    if (this.browsers.size === 0) return;
-    
     let oldestId: string | null = null;
     let oldestTime = Date.now();
     
@@ -287,6 +369,7 @@ export class PuppeteerWrapper {
     }
     
     if (oldestId) {
+      console.log(`🌐 PuppeteerWrapper: Closing oldest browser (ID: ${oldestId})`);
       await this.closeBrowser(oldestId);
     }
   }
@@ -296,95 +379,92 @@ export class PuppeteerWrapper {
    */
   async bypassProtection(page: puppeteer.Page, url: string): Promise<boolean> {
     try {
-      const response = await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+      // Navigate to the URL
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
       
-      if (!response) {
-        console.warn('⚠️ No response received from page');
-        return false;
-      }
+      // Check if we're dealing with Cloudflare or similar protection
+      const isCloudflare = await page.evaluate(() => {
+        return document.querySelector('title')?.textContent?.includes('Cloudflare') || 
+               document.querySelector('body')?.textContent?.includes('Checking your browser') ||
+               document.querySelector('body')?.textContent?.includes('human verification') ||
+               document.querySelector('body')?.textContent?.includes('DDoS protection') ||
+               document.querySelector('body')?.textContent?.includes('security challenge');
+      });
       
-      const html = await page.content();
-      
-      // Check if we've hit Cloudflare or similar protection
-      if (
-        html.includes('challenge-running') || 
-        html.includes('challenge-form') || 
-        html.includes('captcha') ||
-        html.includes('cf-browser-verification') ||
-        html.includes('Just a moment') ||
-        html.includes('security check')
-      ) {
-        console.log('🛡️ Protection system detected, attempting to bypass...');
+      if (isCloudflare) {
+        console.log('🛡️ PuppeteerWrapper: Detected protection system, attempting to bypass...');
         
         // Take a screenshot for debugging
-        await this.saveScreenshot(page, 'protection-detected');
+        await this.saveScreenshot(page, 'cloudflare-challenge');
         
-        // Wait a while to see if the challenge resolves automatically
-        await page.waitForTimeout(5000);
+        // Wait some time for the challenge to process
+        await new Promise(r => setTimeout(r, 10000));
         
-        // Sometimes Cloudflare auto-resolves after a few seconds
-        const newHtml = await page.content();
-        if (
-          !newHtml.includes('challenge-running') && 
-          !newHtml.includes('challenge-form') && 
-          !newHtml.includes('captcha') &&
-          !newHtml.includes('cf-browser-verification') &&
-          !newHtml.includes('Just a moment') &&
-          !newHtml.includes('security check')
-        ) {
-          console.log('🎉 Protection was bypassed automatically');
-          return true;
+        // Sometimes we need to perform actions to pass the challenge
+        try {
+          // Try clicking any visible buttons or checkboxes
+          const clickedSomething = await page.evaluate(() => {
+            const buttons = Array.from(document.querySelectorAll('button, input[type="checkbox"], .ray-id'));
+            for (const button of buttons) {
+              if (button.getBoundingClientRect().width > 0 && button.getBoundingClientRect().height > 0) {
+                // @ts-ignore
+                button.click();
+                return true;
+              }
+            }
+            return false;
+          });
+          
+          if (clickedSomething) {
+            console.log('🛡️ PuppeteerWrapper: Clicked on an element to try to bypass protection');
+            await new Promise(r => setTimeout(r, 8000));
+          }
+        } catch (e) {
+          console.error('❌ PuppeteerWrapper: Error when trying to click elements:', e);
         }
         
-        // Try to find and click the checkbox or verification button
-        try {
-          // Look for common protection elements
-          const selectors = [
-            'input[type="checkbox"]',
-            'form .button',
-            '.captcha-container',
-            '#challenge-stage button',
-            '.ray-id'
-          ];
-          
-          for (const selector of selectors) {
-            const exists = await page.$(selector);
-            if (exists) {
-              console.log(`Found ${selector}, attempting to interact...`);
-              await page.click(selector);
-              await page.waitForTimeout(2000);
-            }
-          }
-          
-          // Wait for navigation after interaction
-          await page.waitForNavigation({ timeout: 10000 }).catch(() => {});
-          
-          // Check if we passed the protection
-          const finalHtml = await page.content();
-          const passed = !finalHtml.includes('challenge-running') && 
-                         !finalHtml.includes('challenge-form') && 
-                         !finalHtml.includes('captcha') &&
-                         !finalHtml.includes('cf-browser-verification') &&
-                         !finalHtml.includes('Just a moment') &&
-                         !finalHtml.includes('security check');
-          
-          if (passed) {
-            console.log('🎉 Successfully bypassed protection');
-            return true;
-          } else {
-            console.warn('⚠️ Failed to bypass protection');
-            return false;
-          }
-        } catch (error) {
-          console.error('❌ Error trying to bypass protection:', error);
+        // Move the mouse randomly to simulate human behavior
+        const viewportWidth = page.viewport()?.width || 1366;
+        const viewportHeight = page.viewport()?.height || 768;
+        
+        // Perform some random mouse movements
+        for (let i = 0; i < 5; i++) {
+          await page.mouse.move(
+            Math.floor(Math.random() * viewportWidth), 
+            Math.floor(Math.random() * viewportHeight),
+            { steps: 25 }
+          );
+          await new Promise(r => setTimeout(r, Math.random() * 1000 + 500));
+        }
+        
+        // Wait for navigation to complete
+        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 })
+          .catch(() => console.log('🛡️ PuppeteerWrapper: Timeout waiting for navigation after protection'));
+        
+        // Take another screenshot to see if we passed
+        await this.saveScreenshot(page, 'after-cloudflare');
+        
+        // Check if we're still on the protection page
+        const stillProtected = await page.evaluate(() => {
+          return document.querySelector('title')?.textContent?.includes('Cloudflare') || 
+                 document.querySelector('body')?.textContent?.includes('Checking your browser') ||
+                 document.querySelector('body')?.textContent?.includes('human verification') ||
+                 document.querySelector('body')?.textContent?.includes('DDoS protection') ||
+                 document.querySelector('body')?.textContent?.includes('security challenge');
+        });
+        
+        if (stillProtected) {
+          console.log('❌ PuppeteerWrapper: Failed to bypass protection system');
           return false;
+        } else {
+          console.log('✅ PuppeteerWrapper: Successfully bypassed protection system');
+          return true;
         }
       }
       
-      // No protection detected
-      return true;
+      return true; // No protection detected
     } catch (error) {
-      console.error('❌ Error in bypassProtection:', error);
+      console.error(`❌ PuppeteerWrapper: Error navigating to ${url}:`, error);
       return false;
     }
   }
@@ -394,48 +474,45 @@ export class PuppeteerWrapper {
    */
   async healthCheck(): Promise<{ status: 'ok' | 'error', details: any }> {
     try {
-      const testStart = Date.now();
+      console.log('🌐 PuppeteerWrapper: Running health check...');
       
-      // Create a test browser and page
-      const instance = await this.createBrowser();
-      const page = await instance.browser.newPage();
+      // Create a new page for testing
+      const page = await this.newPage();
       
-      // Visit a simple site
-      await page.goto('https://example.com', { waitUntil: 'networkidle0', timeout: 30000 });
+      // Try to navigate to a simple URL
+      await page.goto('https://example.com', { waitUntil: 'networkidle2', timeout: 30000 });
       
-      // Take a screenshot for verification
+      // Take a screenshot as evidence
       const screenshotPath = await this.saveScreenshot(page, 'health-check');
       
-      // Get page title
+      // Check if we got the expected page title
       const title = await page.title();
+      const isSuccess = title.includes('Example');
       
-      // Close the page and browser
+      // Close the page
       await page.close();
-      await this.closeBrowser(instance.id);
       
-      return {
-        status: 'ok',
-        details: {
-          title,
-          executionTimeMs: Date.now() - testStart,
-          screenshotPath,
-          timestamp: new Date().toISOString()
-        }
-      };
+      if (isSuccess) {
+        console.log('✅ PuppeteerWrapper: Health check passed');
+        return { 
+          status: 'ok', 
+          details: { title, screenshotPath } 
+        };
+      } else {
+        console.error('❌ PuppeteerWrapper: Health check failed - wrong page title');
+        return { 
+          status: 'error', 
+          details: { title, screenshotPath, error: 'Wrong page title' } 
+        };
+      }
     } catch (error) {
-      console.error('❌ Puppeteer health check failed:', error);
-      
-      return {
-        status: 'error',
-        details: {
-          error: (error as Error).message,
-          stack: (error as Error).stack,
-          timestamp: new Date().toISOString()
-        }
+      console.error('❌ PuppeteerWrapper: Health check failed with error:', error);
+      return { 
+        status: 'error', 
+        details: { error: (error as Error).message, stack: (error as Error).stack } 
       };
     }
   }
 }
 
-// Export singleton instance
 export const puppeteerWrapper = new PuppeteerWrapper();

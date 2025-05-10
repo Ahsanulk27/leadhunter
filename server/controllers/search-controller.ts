@@ -1,406 +1,304 @@
 /**
- * Controller to manage lead search operations
- * Handles coordinating between different data sources and ensures only real data is returned
+ * Search controller to coordinate scraping from multiple sources and implement pagination
  */
 
+import { BusinessData, ScrapingResult, SearchParams, ErrorResponse } from '../models/business-data';
 import { googleMapsScraper } from '../api/google-maps-scraper';
 import { yelpScraper } from '../api/yelp-scraper';
-import { googlePlacesService } from '../api/google-places-service';
-import { industryScraper } from '../api/industry-scraper';
+import { yellowPagesScraper } from '../api/yellow-pages-scraper';
+import * as fs from 'fs';
+import * as path from 'path';
+import { randomBytes } from 'crypto';
 
-export interface SearchParams {
-  company?: string;
-  industry?: string;
-  location?: string;
-  position?: string;
-  size?: string;
-  prioritizeDecisionMakers?: boolean;
-  page?: number;
-  limit?: number;
-  executionId?: string;
-  executionLog?: any;
-}
-
-export interface BusinessData {
-  name: string;
-  industry: string;
-  location: string;
-  size: string;
-  address: string;
-  phone?: string;
-  website?: string;
-  email?: string;
-  contacts: any[];
-  scrapeSource?: string; // Tracking which source provided this data
-  scrapeTimestamp?: number;
-}
-
-export interface ScrapingResult {
-  businesses: BusinessData[];
-  totalCount: number;
-  sources: string[];
-  page: number;
-  limit: number;
-  executionLog: any;
+interface ScraperFunction {
+  (query: string, location?: string, executionId?: string, executionLog?: any): Promise<{ businesses: BusinessData[], totalResults?: number }>;
 }
 
 export class SearchController {
+  private logsDir = path.join(process.cwd(), 'logs');
+  
+  constructor() {
+    // Ensure logs directory exists
+    if (!fs.existsSync(this.logsDir)) {
+      fs.mkdirSync(this.logsDir, { recursive: true });
+    }
+  }
+
   /**
-   * Search for business data from real sources only
-   * This will try multiple real sources in sequence
+   * Search for business data from multiple sources with pagination
    */
-  async searchBusinessData(params: SearchParams): Promise<ScrapingResult | null> {
-    const executionId = params.executionId || `exec-${Date.now()}`;
-    console.log(`📍 [${executionId}] SearchController: Processing search request with params:`, params);
+  async searchBusinessData(params: SearchParams): Promise<ScrapingResult | ErrorResponse> {
+    const {
+      industry,
+      location,
+      companyName,
+      page = 1,
+      limit = 20,
+      executionId: providedExecutionId,
+      executionLog: providedExecutionLog
+    } = params;
     
-    // Set up pagination defaults
-    const page = params.page || 1;
-    const limit = params.limit || 10;
+    // Generate execution ID if not provided
+    const executionId = providedExecutionId || `search-${Date.now()}-${randomBytes(4).toString('hex')}`;
     
-    // Initialize execution log if not provided
-    const executionLog = params.executionLog || {
+    // Initialize execution log
+    const executionLog = providedExecutionLog || {
       execution_id: executionId,
       timestamp: new Date().toISOString(),
-      query_params: params,
+      query_params: { industry, location, companyName, page, limit },
       scraping_attempts: [],
       scraping_results: [],
       error_details: []
     };
     
-    // Build the search query for scrapers
-    const searchQuery = params.company || 
-                     (params.industry && params.location ? `${params.industry} in ${params.location}` : 
-                      (params.industry || params.location || ''));
+    const executionStartTime = Date.now();
     
+    // Determine search query - prefer company name, fallback to industry
+    const searchQuery = companyName || industry || '';
     if (!searchQuery) {
-      console.log(`📍 [${executionId}] SearchController: No search query provided`);
-      executionLog.error_details.push({
-        timestamp: new Date().toISOString(),
-        type: "validation_error",
-        message: "No search query could be constructed from the provided parameters"
-      });
-      return null;
-    }
-    
-    // Track all businesses found across all sources
-    const allBusinesses: BusinessData[] = [];
-    const sourcesAttempted: string[] = [];
-    const sourcesSucceeded: string[] = [];
-    
-    // If we have a specific industry, try that first through industry directory
-    if (params.industry && !params.company) {
-      console.log(`📍 SearchController: Searching industry directory for: ${params.industry}`);
-      try {
-        const industryResults = await industryScraper.searchIndustryDirectory(
-          params.industry, 
-          params.location
-        );
-        
-        if (industryResults && industryResults.length > 0) {
-          console.log(`📍 SearchController: Found ${industryResults.length} businesses in industry directories`);
-          allBusinesses.push(...industryResults.map(business => ({
-            name: business.name,
-            industry: params.industry || business.industry || '',
-            location: params.location || business.location || '',
-            size: params.size || business.size || '',
-            address: business.address || '',
-            phone: business.phone || '',
-            website: business.website || '',
-            email: business.email || '',
-            contacts: business.contacts || [],
-            scrapeSource: 'Industry Directory',
-            scrapeTimestamp: Date.now()
-          })));
-        }
-      } catch (industryError) {
-        console.error("Error with industry directory search:", industryError);
-      }
-    }
-    
-    // 1. Try Google Maps with puppeteer if we don't have results yet
-    if (allBusinesses.length === 0) {
-      console.log(`📍 SearchController: Searching Google Maps for: ${searchQuery}`);
-      try {
-        const googleMapsResults = await googleMapsScraper.searchBusinesses(searchQuery);
-        
-        if (googleMapsResults && googleMapsResults.length > 0) {
-          console.log(`📍 SearchController: Found ${googleMapsResults.length} businesses on Google Maps`);
-          allBusinesses.push(...googleMapsResults.map(business => ({
-            name: business.name,
-            industry: params.industry || (business.types && business.types.length > 0 ? 
-                                    business.types[0].replace(/_/g, ' ') : ''),
-            location: params.location || business.vicinity || '',
-            size: params.size || '',
-            address: business.formatted_address || business.vicinity || '',
-            phone: business.phone || '',
-            website: business.website || '',
-            email: '',
-            contacts: [{
-              id: 1,
-              name: `Contact at ${business.name}`,
-              position: 'Manager',
-              email: `contact@${this.formatDomain(business.name)}`,
-              companyPhone: business.phone || '',
-              isDecisionMaker: true
-            }],
-            scrapeSource: 'Google Maps',
-            scrapeTimestamp: Date.now()
-          })));
-        }
-      } catch (googleMapsError) {
-        console.error("Error with Google Maps search:", googleMapsError);
-      }
-    }
-    
-    // 2. Try Yelp if we still don't have results
-    if (allBusinesses.length === 0) {
-      console.log(`📍 SearchController: Searching Yelp for: ${searchQuery}`);
-      try {
-        const yelpResults = await yelpScraper.searchBusinesses(searchQuery, params.location);
-        
-        if (yelpResults && yelpResults.length > 0) {
-          console.log(`📍 SearchController: Found ${yelpResults.length} businesses on Yelp`);
-          allBusinesses.push(...yelpResults.map(business => ({
-            name: business.name,
-            industry: params.industry || business.categories?.join(', ') || '',
-            location: params.location || business.location || '',
-            size: params.size || this.employeeCountToRange(business.employeeCount || 0) || '',
-            address: business.address || '',
-            phone: business.phone || '',
-            website: business.website || '',
-            email: business.email || '',
-            contacts: [{
-              id: 1,
-              name: business.ownerName || `Owner at ${business.name}`,
-              position: 'Owner',
-              email: business.email || `owner@${this.formatDomain(business.name)}`,
-              companyPhone: business.phone || '',
-              isDecisionMaker: true
-            }],
-            scrapeSource: 'Yelp',
-            scrapeTimestamp: Date.now()
-          })));
-        }
-      } catch (yelpError) {
-        console.error("Error with Yelp search:", yelpError);
-      }
-    }
-    
-    // 3. Try Yellow Pages as a last resort
-    if (allBusinesses.length === 0) {
-      console.log(`📍 SearchController: Searching Yellow Pages for: ${searchQuery}`);
-      try {
-        const yellowPagesResults = await googlePlacesService.scrapeYellowPages(searchQuery);
-        
-        if (yellowPagesResults && yellowPagesResults.length > 0) {
-          console.log(`📍 SearchController: Found ${yellowPagesResults.length} businesses on Yellow Pages`);
-          allBusinesses.push(...yellowPagesResults.map(business => ({
-            name: business.name,
-            industry: params.industry || business.categories?.join(', ') || '',
-            location: params.location || business.location || '',
-            size: params.size || '',
-            address: business.address || '',
-            phone: business.phone || '',
-            website: business.website || '',
-            email: business.email || '',
-            contacts: [{
-              id: 1,
-              name: `Contact at ${business.name}`,
-              position: 'Manager',
-              email: `contact@${this.formatDomain(business.name)}`,
-              companyPhone: business.phone || '',
-              isDecisionMaker: true
-            }],
-            scrapeSource: 'Yellow Pages',
-            scrapeTimestamp: Date.now()
-          })));
-        }
-      } catch (yellowPagesError) {
-        console.error("Error with Yellow Pages search:", yellowPagesError);
-      }
-    }
-    
-    // If we found any businesses, get more details for the first one
-    if (allBusinesses.length > 0) {
-      const topBusiness = allBusinesses[0];
-      
-      // Business data with detailed info from scrapers
-      let businessDetails = null;
-      
-      console.log(`📍 SearchController: Getting details for business: ${topBusiness.name}`);
-      
-      // Try to get more details based on where we found the business
-      if (topBusiness.place_id?.startsWith('dir-')) {
-        // If from industry directory
-        try {
-          businessDetails = await industryScraper.getBusinessDetails(
-            params.company || topBusiness.name,
-            params.industry,
-            params.location
-          );
-          console.log(`📍 SearchController: Got industry directory details for ${topBusiness.name}`);
-        } catch (industryDetailError) {
-          console.error("Error getting industry business details:", industryDetailError);
-        }
-      } else if (topBusiness.place_id?.startsWith('gm-') || params.company) {
-        // If from Google Maps or if we have a company name
-        try {
-          businessDetails = await googleMapsScraper.getBusinessDetails(
-            params.company || topBusiness.name, 
-            params.location
-          );
-          console.log(`📍 SearchController: Got Google Maps details for ${topBusiness.name}`);
-        } catch (mapsDetailError) {
-          console.error("Error getting Google Maps business details:", mapsDetailError);
-        }
-      } else if (topBusiness.yelp_url) {
-        // If from Yelp
-        try {
-          businessDetails = await yelpScraper.getBusinessDetails(topBusiness.yelp_url);
-          console.log(`📍 SearchController: Got Yelp details for ${topBusiness.name}`);
-        } catch (yelpDetailError) {
-          console.error("Error getting Yelp business details:", yelpDetailError);
-        }
-      }
-      
-      // Create the business data
-      let scrapedData: BusinessData;
-      let scrapeSource = 'unknown';
-      
-      // Determine the source based on the place_id format or origin
-      if (topBusiness.place_id?.startsWith('dir-')) {
-        scrapeSource = 'industry-directory';
-      } else if (topBusiness.place_id?.startsWith('gm-')) {
-        scrapeSource = 'google-maps';
-      } else if (topBusiness.yelp_url) {
-        scrapeSource = 'yelp';
-      } else if (topBusiness.place_id?.startsWith('yp-')) {
-        scrapeSource = 'yellow-pages';
-      }
-      
-      console.log(`📍 SearchController: Creating business data from ${scrapeSource} source`);
-      
-      if (businessDetails) {
-        // We have detailed business information
-        console.log(`📍 SearchController: Using detailed business information:`, JSON.stringify(businessDetails, null, 2));
-        
-        scrapedData = {
-          name: businessDetails.name,
-          industry: params.industry || '',
-          location: params.location || businessDetails.address || '',
-          size: params.size || '',
-          address: businessDetails.address || '',
-          phone: businessDetails.phone || '',
-          website: businessDetails.website || '',
-          email: businessDetails.email || '',
-          contacts: businessDetails.contacts || [],
-          scrapeSource,
-          scrapeTimestamp: Date.now()
-        };
-      } else {
-        // Create basic data from the search result
-        console.log(`📍 SearchController: Using basic business information from search:`, JSON.stringify(topBusiness, null, 2));
-        
-        scrapedData = {
-          name: topBusiness.name,
-          industry: params.industry || (topBusiness.types && topBusiness.types.length > 0 ? 
-                                     topBusiness.types[0].replace(/_/g, ' ') : ''),
-          location: params.location || topBusiness.vicinity || '',
-          size: params.size || '',
-          address: topBusiness.formatted_address || topBusiness.vicinity || '',
-          phone: topBusiness.phone || '',
-          website: topBusiness.website || '',
-          email: '',
-          contacts: [{
-            id: 1,
-            name: `Contact at ${topBusiness.name}`,
-            position: topBusiness.types && topBusiness.types.length > 0 ? 
-                    `${topBusiness.types[0].replace(/_/g, ' ')} Professional` : 
-                    "Business Representative",
-            email: null,
-            companyPhone: topBusiness.phone || null,
-            personalPhone: null,
-            isDecisionMaker: true,
-            influence: 75,
-            notes: `Contact information from ${scrapeSource} business listing.`
-          }],
-          scrapeSource,
-          scrapeTimestamp: Date.now()
-        };
-      }
-      
-      // Validate that we have real data - at least business name and either address or phone
-      if (!scrapedData.name || (!scrapedData.address && !scrapedData.phone)) {
-        console.error(`❌ SearchController: Insufficient business data - missing required fields`);
-        return null;
-      }
-      
-      console.log(`✅ SearchController: Successfully created business data for ${scrapedData.name}`);
-      
-      // Add to our collection of businesses
-      allBusinesses.push(scrapedData);
-      
-      // Format the result as a ScrapingResult
       return {
-        businesses: allBusinesses,
-        totalCount: allBusinesses.length,
-        sources: sourcesSucceeded,
-        page: params.page || 1,
-        limit: params.limit || 10,
-        executionLog
+        error: 'No search query provided',
+        details: 'Please provide either an industry or a company name to search for',
+        executionId,
+        executionDate: new Date().toISOString()
       };
     }
     
-    // No real businesses found
-    console.log(`❌ SearchController: No businesses found from any source`);
-    executionLog.final_status = "no_results";
-    return null;
-  }
-  
-  /**
-   * Format a company name into a domain name format
-   */
-  private formatDomain(companyName: string): string {
-    if (!companyName) return "example.com";
+    console.log(`🔍 SearchController: Searching for "${searchQuery}" in "${location || 'any location'}" (page ${page}, limit ${limit})`);
     
-    return companyName
-      .toLowerCase()
-      .replace(/[^\w\s]/g, '')  // Remove special characters
-      .replace(/\s+/g, '')      // Remove whitespace
-      .replace(/^the/, '')      // Remove leading "the"
-      .replace(/inc$|llc$|corp$/, '') // Remove common business suffixes
-      + '.com';
-  }
-  
-  /**
-   * Convert an employee count number to a size range
-   */
-  private employeeCountToRange(employeeCount: number): string {
-    if (employeeCount === 0) return '';
-    if (employeeCount < 10) return '1-9 employees';
-    if (employeeCount < 50) return '10-49 employees';
-    if (employeeCount < 200) return '50-199 employees';
-    if (employeeCount < 500) return '200-499 employees';
-    if (employeeCount < 1000) return '500-999 employees';
-    return '1000+ employees';
-  }
-  
-  /**
-   * Check if a job title likely represents a decision maker
-   */
-  private isDecisionMakerTitle(title: string = ""): boolean {
-    if (!title) return false;
-    
-    const lowercaseTitle = title.toLowerCase();
-    const decisionMakerTitles = [
-      "owner", "founder", "ceo", "president", "director", 
-      "manager", "chief", "head", "vp", "vice president",
-      "principal", "partner", "executive"
+    // Set up scraping pipeline
+    const scrapers: { name: string; fn: ScraperFunction }[] = [
+      { name: 'google-maps', fn: googleMapsScraper.searchBusinesses.bind(googleMapsScraper) },
+      { name: 'yelp', fn: yelpScraper.searchBusinesses.bind(yelpScraper) },
+      { name: 'yellow-pages', fn: yellowPagesScraper.searchBusinesses.bind(yellowPagesScraper) }
     ];
     
-    return decisionMakerTitles.some(t => lowercaseTitle.includes(t));
+    // Log path for this execution
+    const logFilePath = path.join(this.logsDir, `search-${executionId}.json`);
+    
+    try {
+      // Run scrapers in parallel
+      const scrapingResults = await Promise.allSettled(
+        scrapers.map(scraper => 
+          scraper.fn(searchQuery, location, `${executionId}-${scraper.name}`, executionLog)
+          .catch(error => {
+            console.error(`❌ Error in ${scraper.name} scraper:`, error);
+            return { businesses: [] };
+          })
+        )
+      );
+      
+      // Collect all successful business data
+      const allBusinesses: BusinessData[] = [];
+      
+      scrapingResults.forEach((result, index) => {
+        if (result.status === 'fulfilled' && result.value.businesses.length > 0) {
+          const scraperName = scrapers[index].name;
+          console.log(`✅ ${scraperName} found ${result.value.businesses.length} results`);
+          
+          // Add all businesses from this scraper
+          allBusinesses.push(...result.value.businesses);
+        } else {
+          console.log(`❌ ${scrapers[index].name} failed or returned no results`);
+        }
+      });
+      
+      // Remove duplicates based on name + phone number or name + address
+      const uniqueBusinesses = this.removeDuplicates(allBusinesses);
+      
+      // If we have no data from any source, return error
+      if (uniqueBusinesses.length === 0) {
+        console.log(`❌ SearchController: No businesses found from any source`);
+        const error: ErrorResponse = {
+          error: "No real business data found after live attempts.",
+          details: "All scraping attempts failed to return any business data.",
+          executionId,
+          executionDate: new Date().toISOString()
+        };
+        
+        // Log the execution for diagnostics
+        fs.writeFileSync(logFilePath, JSON.stringify({
+          error,
+          executionLog
+        }, null, 2));
+        
+        return error;
+      }
+      
+      // Apply pagination
+      const totalResults = uniqueBusinesses.length;
+      const totalPages = Math.ceil(totalResults / limit);
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+      const paginatedBusinesses = uniqueBusinesses.slice(startIndex, endIndex);
+      
+      // Prepare response
+      const response: ScrapingResult = {
+        businesses: paginatedBusinesses,
+        page,
+        limit,
+        totalResults,
+        totalPages,
+        executionTimeMs: Date.now() - executionStartTime,
+        sources: scrapers.map(s => s.name),
+        query: searchQuery,
+        location: location,
+        executionDate: new Date().toISOString(),
+        executionId
+      };
+      
+      // Log the execution for diagnostics
+      executionLog.final_result = {
+        total_businesses: totalResults,
+        paginated_count: paginatedBusinesses.length,
+        execution_time_ms: response.executionTimeMs
+      };
+      
+      fs.writeFileSync(logFilePath, JSON.stringify({
+        result: response,
+        executionLog
+      }, null, 2));
+      
+      return response;
+      
+    } catch (error) {
+      console.error('❌ SearchController error:', error);
+      
+      const errorResponse: ErrorResponse = {
+        error: "Search operation failed",
+        details: (error as Error).message,
+        executionId,
+        executionDate: new Date().toISOString()
+      };
+      
+      // Log the error for diagnostics
+      executionLog.error = {
+        message: (error as Error).message,
+        stack: (error as Error).stack
+      };
+      
+      fs.writeFileSync(logFilePath, JSON.stringify({
+        error: errorResponse,
+        executionLog
+      }, null, 2));
+      
+      return errorResponse;
+    }
+  }
+
+  /**
+   * Remove duplicate businesses based on name + phone or name + address
+   */
+  private removeDuplicates(businesses: BusinessData[]): BusinessData[] {
+    const uniqueMap = new Map<string, BusinessData>();
+    
+    businesses.forEach(business => {
+      // Create unique keys based on name + phone or name + address
+      const nameNormalized = this.normalizeString(business.name);
+      const phoneNormalized = this.normalizeString(business.phoneNumber);
+      const addressNormalized = this.normalizeString(business.address);
+      
+      // Try to create a unique identifier
+      let key = '';
+      if (nameNormalized && phoneNormalized) {
+        key = `${nameNormalized}-${phoneNormalized}`;
+      } else if (nameNormalized && addressNormalized) {
+        key = `${nameNormalized}-${addressNormalized}`;
+      } else {
+        // If we don't have enough info to de-duplicate, use the whole business as a key
+        key = JSON.stringify(business);
+      }
+      
+      // Only add if we don't already have this business, or if this one has more details
+      const existingBusiness = uniqueMap.get(key);
+      if (!existingBusiness || this.hasMoreDetails(business, existingBusiness)) {
+        
+        // If we already have a business but from a different source, merge the contacts
+        if (existingBusiness) {
+          const mergedContacts = [...existingBusiness.contacts];
+          
+          // Add new contacts that aren't duplicates
+          business.contacts.forEach(newContact => {
+            const isDuplicate = mergedContacts.some(existingContact => 
+              this.normalizeString(existingContact.name) === this.normalizeString(newContact.name)
+            );
+            
+            if (!isDuplicate) {
+              mergedContacts.push(newContact);
+            }
+          });
+          
+          // Create a merged business record
+          business = {
+            ...business,
+            contacts: mergedContacts,
+            // Preserve IDs if they exist
+            place_id: business.place_id || existingBusiness.place_id,
+            yelp_url: business.yelp_url || existingBusiness.yelp_url,
+            yellow_pages_url: business.yellow_pages_url || existingBusiness.yellow_pages_url
+          };
+        }
+        
+        uniqueMap.set(key, business);
+      }
+    });
+    
+    return Array.from(uniqueMap.values());
+  }
+
+  /**
+   * Check if one business record has more details than another
+   */
+  private hasMoreDetails(b1: BusinessData, b2: BusinessData): boolean {
+    // Create a simple score based on field presence
+    const score1 = this.calculateDetailScore(b1);
+    const score2 = this.calculateDetailScore(b2);
+    
+    return score1 > score2;
+  }
+
+  /**
+   * Calculate a detail score for a business based on available fields
+   */
+  private calculateDetailScore(business: BusinessData): number {
+    let score = 0;
+    
+    // Basic info
+    if (business.name) score += 1;
+    if (business.address) score += 1;
+    if (business.phoneNumber) score += 1;
+    if (business.website) score += 2;
+    
+    // Industry and location
+    if (business.industry) score += 1;
+    if (business.location) score += 1;
+    if (business.size && business.size !== 'Unknown') score += 1;
+    
+    // Contacts
+    score += business.contacts.length * 3;
+    
+    // Additional data
+    if (business.place_id) score += 1;
+    if (business.yelp_url) score += 1;
+    if (business.yellow_pages_url) score += 1;
+    if (business.google_rating) score += 1;
+    if (business.review_count) score += 1;
+    
+    // If we have types, that's more detailed information
+    if (business.types && business.types.length > 0) score += 1;
+    if (business.vicinity) score += 1;
+    if (business.formatted_address) score += 1;
+    
+    return score;
+  }
+
+  /**
+   * Helper function to normalize strings for comparison
+   */
+  private normalizeString(str: string): string {
+    if (!str) return '';
+    return str.toLowerCase().replace(/[^a-z0-9]/g, '');
   }
 }
 
-// Export singleton instance
 export const searchController = new SearchController();

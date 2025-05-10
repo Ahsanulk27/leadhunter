@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import * as cheerio from "cheerio";
 import axios from "axios";
 import { generateIndustryContacts } from "./routes-industry";
-import { BusinessData } from "./controllers/search-controller";
+import { BusinessData, ScrapingResult, ErrorResponse, SearchParams } from "./models/business-data";
 import { 
   insertCompanySchema, insertContactSchema, insertSearchHistorySchema,
   type InsertCompany, type InsertContact, type InsertSearchHistory,

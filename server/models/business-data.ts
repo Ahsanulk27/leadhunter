@@ -63,7 +63,6 @@ export interface ScrapingResult {
   executionId?: string;
 }
 
-// Response format for cases where no real data could be found
 export interface ErrorResponse {
   error: string;
   details?: string;
@@ -71,7 +70,6 @@ export interface ErrorResponse {
   executionDate?: string;
 }
 
-// Interfaces for helper functions
 export interface SearchParams {
   industry?: string;
   location?: string;
