@@ -28,7 +28,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Search for company leads
   app.post("/api/search", async (req: Request, res: Response) => {
     try {
+      console.log("📍 API /search route called with request body:", req.body);
       const { company, industry, location, position, size, prioritizeDecisionMakers } = req.body;
+      
+      console.log(`📍 Search parameters: 
+        - Company: ${company || 'Not provided'}
+        - Industry: ${industry || 'Not provided'}
+        - Location: ${location || 'Not provided'}
+        - Position: ${position || 'Not provided'}
+        - Size: ${size || 'Not provided'}
+        - Prioritize Decision Makers: ${prioritizeDecisionMakers ? 'Yes' : 'No'}
+      `);
       
       // Build the search query for history recording
       const searchQuery = company || 
@@ -42,11 +52,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       await storage.createSearchHistory(searchHistoryData);
+      console.log("📍 Search recorded in history");
 
       // Import our search controller which coordinates all data sources
+      console.log("📍 Importing and using search controller...");
       const { searchController } = await import('./controllers/search-controller');
       
-      console.log("Searching for REAL business data from multiple sources...");
+      console.log("📍 Searching for REAL business data from multiple sources...");
       
       // Search across all real data sources
       const scrapedData = await searchController.searchBusinessData({
@@ -58,8 +70,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         prioritizeDecisionMakers
       });
       
+      console.log("📍 Search completed, results:", scrapedData ? "Data found" : "No data found");
+      
       // We ONLY use real data - if no results found, return 404
       if (!scrapedData) {
+        console.log("📍 No real data found, returning 404");
         if (!industry && !company && !location) {
           return res.status(404).json({ 
             error: "Missing search criteria", 
@@ -72,6 +87,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
       }
+      
+      console.log("📍 Real data found, continuing with processing...");
 
       // Store company information
       const companyData: InsertCompany = {

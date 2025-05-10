@@ -7,11 +7,89 @@ import { getRandomUserAgent, getRandomDelay } from './scraper-utils';
  */
 export class PuppeteerWrapper {
   /**
+   * Improved method to check if the page contains a CAPTCHA
+   * This analyzes both DOM elements and page content
+   */
+  private async checkForCaptcha(page: puppeteer.Page): Promise<boolean> {
+    try {
+      console.log(`📍 PuppeteerWrapper: Checking for CAPTCHA presence`);
+      
+      // More comprehensive list of captcha selectors
+      const captchaSelectors = [
+        'div[data-captcha]',
+        'div.g-recaptcha',
+        'iframe[src*="recaptcha"]',
+        'iframe[src*="captcha"]',
+        'div.rc-anchor',
+        'form#captcha',
+        'img[src*="captcha"]',
+        'form[action*="captcha"]',
+        'input[name*="captcha"]',
+        'div.captcha',
+        '#captcha',
+        '.recaptcha'
+      ];
+      
+      for (const selector of captchaSelectors) {
+        try {
+          const foundCaptcha = await page.$(selector);
+          if (foundCaptcha) {
+            console.log(`Found CAPTCHA with selector: ${selector}`);
+            return true;
+          }
+        } catch (e) {
+          // Ignore errors for individual selectors
+        }
+      }
+      
+      // Check page title and content for CAPTCHA-related terms
+      const pageTitle = await page.title();
+      const bodyContent = await page.evaluate(() => document.body.innerText);
+      
+      const captchaTerms = [
+        'captcha', 
+        'robot', 
+        'verify', 
+        'human', 
+        'suspicious', 
+        'security check',
+        'prove you\'re not',
+        'unusual traffic',
+        'automated access',
+        'blocked',
+        'challenge'
+      ];
+      
+      for (const term of captchaTerms) {
+        if (
+          pageTitle.toLowerCase().includes(term) ||
+          bodyContent.toLowerCase().includes(term)
+        ) {
+          console.log(`CAPTCHA detected based on term: ${term}`);
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Error checking for CAPTCHA:', error);
+      return false;
+    }
+  }
+  
+  /**
    * Launch a browser with proper configuration for scraping
    */
   async launch(): Promise<puppeteer.Browser> {
     return await puppeteer.launch({
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security'],
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-web-security',
+        '--disable-features=IsolateOrigins',
+        '--disable-site-isolation-trials'
+      ],
+      // @ts-ignore - ignoreHTTPSErrors exists but TypeScript definition may be outdated
       ignoreHTTPSErrors: true
     });
   }
@@ -30,27 +108,9 @@ export class PuppeteerWrapper {
       return new Promise(resolve => setTimeout(resolve, timeout));
     };
     
-    // Add methods to handle captchas if needed
+    // Add methods to handle captchas if needed - use our improved implementation
     (page as any).checkForCaptcha = async () => {
-      const captchaSelectors = [
-        'iframe[src*="captcha"]',
-        'iframe[src*="recaptcha"]',
-        '.g-recaptcha',
-        'form[action*="captcha"]',
-        'input[name*="captcha"]',
-        'img[src*="captcha"]',
-        'div:contains("captcha")',
-        'div:contains("Verify you are a human")',
-        'div:contains("Please verify")'
-      ];
-      
-      for (const selector of captchaSelectors) {
-        if (await page.$(selector)) {
-          return true;
-        }
-      }
-      
-      return false;
+      return await this.checkForCaptcha(page);
     };
     
     return page;

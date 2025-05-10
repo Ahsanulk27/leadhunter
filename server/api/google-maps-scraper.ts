@@ -18,19 +18,35 @@ export class GoogleMapsScraper {
     let browser: puppeteer.Browser | null = null;
     
     try {
+      console.log(`📍 GoogleMapsScraper: Launching puppeteer browser`);
+      
       // Launch puppeteer browser
       browser = await puppeteerWrapper.launch();
       const page = await puppeteerWrapper.createPage(browser);
       
+      console.log(`📍 GoogleMapsScraper: Browser launched, navigating to Google Maps`);
+      
       // Navigate to Google Maps
       await puppeteerWrapper.navigate(page, 'https://www.google.com/maps');
+      
+      console.log(`📍 GoogleMapsScraper: Loaded Google Maps, waiting for search box to appear`);
       
       // Wait for the search box to appear
       const searchBoxSelector = 'input#searchboxinput, input.searchboxinput, input[aria-label="Search Google Maps"]';
       if (!await puppeteerWrapper.waitForSelector(page, searchBoxSelector)) {
-        console.log('Could not find Google Maps search box');
+        console.error('Could not find Google Maps search box - scraper failed');
         await browser.close();
         return [];
+      }
+      
+      console.log(`📍 GoogleMapsScraper: Found search box, preparing to enter search query`);
+      
+      // Add a screenshot for debugging
+      try {
+        await page.screenshot({ path: './google-maps-screenshot.png' });
+        console.log(`📍 GoogleMapsScraper: Captured screenshot before search`);
+      } catch (screenshotError) {
+        console.error('Error taking screenshot:', screenshotError);
       }
       
       // Type the search query with human-like delays
@@ -107,7 +123,8 @@ export class GoogleMapsScraper {
         }
         
         // Process each listing
-        listings.forEach((listing, index) => {
+        // Convert NodeList to Array to avoid TypeScript error
+        Array.from(listings).forEach((listing, index) => {
           try {
             // Find business name element (try various selectors)
             const nameSelectors = [
