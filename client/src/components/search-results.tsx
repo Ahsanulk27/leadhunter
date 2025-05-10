@@ -39,7 +39,7 @@ export default function SearchResults({ results, isLoading, onSaveLead, onExport
   
   // Filter contacts based on decision maker status if the filter is active
   const filteredContacts = filterDecisionMakers 
-    ? contacts.filter((contact: any) => contact.decisionMaker) 
+    ? contacts.filter((contact: any) => contact.isDecisionMaker) 
     : contacts;
   
   // Sort the contacts
@@ -155,7 +155,7 @@ export default function SearchResults({ results, isLoading, onSaveLead, onExport
                       <div>
                         <h3 className="font-medium text-gray-900">{contact.name}</h3>
                         <p className="text-sm text-gray-500">{contact.position || "Unknown Position"}</p>
-                        {contact.decisionMaker && (
+                        {contact.isDecisionMaker && (
                           <div className="mt-1 flex items-center text-sm text-gray-500">
                             <Award className="text-amber-500 mr-1 h-4 w-4" />
                             <span>Top Decision Maker</span>
@@ -172,12 +172,22 @@ export default function SearchResults({ results, isLoading, onSaveLead, onExport
                       </div>
                       <div className="flex items-center text-gray-500">
                         <Phone className="w-5 text-center mr-2 h-4" />
-                        <span>{contact.phone || "No phone available"}</span>
+                        <span>{contact.companyPhone || contact.personalPhone || "No phone available"}</span>
                       </div>
+                      {contact.personalPhone && contact.companyPhone && (
+                        <div className="flex items-center text-gray-500 ml-7">
+                          <span className="text-xs font-medium text-blue-600">+Personal: {contact.personalPhone}</span>
+                        </div>
+                      )}
                       <div className="flex items-center text-gray-500">
                         <MapPin className="w-5 text-center mr-2 h-4" />
                         <span>{company.address || "No address available"}</span>
                       </div>
+                      {contact.homeAddress && (
+                        <div className="flex items-center text-gray-500 ml-7">
+                          <span className="text-xs font-medium text-blue-600">Home: {contact.homeAddress}</span>
+                        </div>
+                      )}
                     </div>
                     <div className="mt-3 flex justify-end space-x-2">
                       <Button variant="ghost" size="sm" className="h-9 w-9 p-0 text-gray-400 hover:text-gray-500">
