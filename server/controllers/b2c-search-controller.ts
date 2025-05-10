@@ -162,17 +162,17 @@ export class B2CSearchController {
         ['Services', services.join(', ')],
         ['Locations', locations.join(', ')],
         ['Max Results', maxResults?.toString() || '50'],
-        ['Only Decision Makers', onlyDecisionMakers !== false ? 'Yes' : 'No'],
-        ['Use Proxies', useProxies !== false ? 'Yes' : 'No']
+        ['Data Source', 'Google Places API'],
+        ['Lead Type', 'Consumer Leads (B2C)']
       ];
       
       const metadataSheet = xlsx.utils.aoa_to_sheet(metadata);
       xlsx.utils.book_append_sheet(wb, metadataSheet, 'Metadata');
       
       // Execute searches sequentially
-      let totalBusinesses = 0;
       let totalContacts = 0;
-      const allResults: ScrapingResult[] = [];
+      // Use any type to avoid typing issues since we're adapting formats
+      const allResults: any[] = [];
       
       for (const service of services) {
         for (const location of locations) {
@@ -276,13 +276,12 @@ export class B2CSearchController {
       
       // Update metadata with results
       metadata.push(
-        ['Total Businesses', totalBusinesses.toString()],
-        ['Total Contacts', totalContacts.toString()],
+        ['Total Consumer Leads', totalContacts.toString()],
         ['Searches Completed', allResults.length.toString()],
         ['Searches Failed', (services.length * locations.length - allResults.length).toString()],
         ['Completion Time', new Date().toISOString()]
       );
-      xlsx.utils.sheet_add_aoa(metadataSheet, metadata.slice(-5), { origin: metadata.length - 5 });
+      xlsx.utils.sheet_add_aoa(metadataSheet, metadata.slice(-4), { origin: metadata.length - 4 });
       
       // Write the workbook to file
       xlsx.writeFile(wb, outputPath);
