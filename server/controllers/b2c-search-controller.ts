@@ -7,6 +7,7 @@ import { Request, Response } from 'express';
 import { createEnhancedProxyManager } from '../api/enhanced-proxy-manager';
 import { createProxyCheerioScraper, SearchParams, ScrapingResult } from '../api/proxy-cheerio-scraper';
 import { generateExecutionId } from '../api/scraper-utils';
+import { b2cPlacesService } from '../api/b2c-places-service';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as xlsx from 'xlsx';
@@ -26,12 +27,12 @@ export class B2CSearchController {
   }
   
   /**
-   * Search for cleaning businesses and their contacts
+   * Search for consumer leads for cleaning services
    */
   async search(req: Request, res: Response) {
     try {
       // Validate request parameters
-      const { query, location, maxResults, onlyDecisionMakers, useProxies } = req.body;
+      const { query, location, maxResults, useProxies } = req.body;
       
       if (!query || !location) {
         return res.status(400).json({
@@ -44,38 +45,40 @@ export class B2CSearchController {
       const executionId = generateExecutionId();
       console.log(`🔍 B2CSearchController: Starting search ${executionId} for "${query}" in ${location}`);
       
-      // Create proxy manager and scraper for this execution
-      const proxyManager = createEnhancedProxyManager(executionId);
-      const scraper = createProxyCheerioScraper(executionId, proxyManager);
+      // Use the B2C Places Service to fetch real consumer leads
+      const result = await b2cPlacesService.getConsumerLeads(location, maxResults || 50);
       
-      // Configure search parameters
-      const searchParams: SearchParams = {
+      if (!result.success) {
+        return res.status(500).json({
+          success: false,
+          error: result.error || 'Failed to fetch consumer leads'
+        });
+      }
+      
+      // For backward compatibility with the UI, transform the result into the expected format
+      const transformedResult = {
+        executionId,
         query,
         location,
-        maxResults: maxResults || 50,
-        onlyDecisionMakers: onlyDecisionMakers !== false,
-        useProxies: useProxies !== false
+        timestamp: new Date().toISOString(),
+        businessCount: 0,
+        contactCount: result.leads.length,
+        businesses: [],
+        // Convert consumer leads to a format the frontend expects
+        consumerLeads: result.leads,
+        totalConsumerLeads: result.totalLeads,
+        sources: [{ name: 'google-places', count: result.leads.length, success: result.leads.length > 0 }],
+        errors: [],
+        warnings: []
       };
       
-      // Execute the search
-      const result = await scraper.search(searchParams);
-      
       // Cache the result
-      this.cacheResult(result);
+      this.cacheConsumerResult(executionId, result);
       
       // Return the result
       res.json({
         success: true,
-        executionId,
-        query,
-        location,
-        timestamp: result.timestamp,
-        businessCount: result.businessCount,
-        contactCount: result.contactCount,
-        businesses: result.businesses,
-        errors: result.errors,
-        warnings: result.warnings,
-        sources: result.sources
+        ...transformedResult
       });
     } catch (error: any) {
       console.error('B2CSearchController error:', error);
@@ -92,7 +95,7 @@ export class B2CSearchController {
   async batchSearch(req: Request, res: Response) {
     try {
       // Validate request parameters
-      const { services, locations, maxResults, onlyDecisionMakers, useProxies } = req.body;
+      const { services, locations, maxResults } = req.body;
       
       if (!services || !services.length || !locations || !locations.length) {
         return res.status(400).json({
@@ -115,8 +118,8 @@ export class B2CSearchController {
         outputFile: `batch_results/${this._generateOutputFilename(services, locations)}`
       });
       
-      // Execute searches in background
-      this._executeBatchSearch(batchId, services, locations, maxResults, onlyDecisionMakers, useProxies);
+      // Execute searches in background using Google Places API
+      this._executeConsumerBatchSearch(batchId, services, locations, maxResults);
     } catch (error: any) {
       console.error('B2CSearchController batch error:', error);
       res.status(500).json({
@@ -316,6 +319,22 @@ export class B2CSearchController {
       fs.writeFileSync(cacheFile, JSON.stringify(result, null, 2));
     } catch (error) {
       console.error('Error caching search result:', error);
+    }
+  }
+  
+  /**
+   * Cache a consumer search result
+   */
+  private cacheConsumerResult(executionId: string, result: any) {
+    try {
+      const cacheFile = path.join(CACHE_DIR, `consumer_${executionId}.json`);
+      fs.writeFileSync(cacheFile, JSON.stringify({
+        executionId,
+        timestamp: new Date().toISOString(),
+        ...result
+      }, null, 2));
+    } catch (error) {
+      console.error('Error caching consumer search result:', error);
     }
   }
   
