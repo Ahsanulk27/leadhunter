@@ -6,8 +6,8 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Health check endpoint
-app.get('/', (req, res) => {
+// Health check endpoint - but don't interfere with frontend routing
+app.get('/api/health', (req, res) => {
   res.status(200).send('OK');
 });
 
