@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 export default function LeadFinder() {
   const [isLoading, setIsLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<any>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -25,24 +26,38 @@ export default function LeadFinder() {
   const searchMutation = useMutation({
     mutationFn: async (searchData: any) => {
       setIsLoading(true);
+      setSearchError(null);
       try {
         const response = await apiRequest('POST', '/api/search', searchData);
-        return await response.json();
+        const data = await response.json();
+        
+        // Check if the response contains an error
+        if (!response.ok || (data && data.error)) {
+          const errorMessage = data.message || "Failed to search for leads";
+          throw new Error(errorMessage);
+        }
+        
+        return data;
       } finally {
         setIsLoading(false);
       }
     },
     onSuccess: (data) => {
       setSearchResults(data);
+      setSearchError(null);
       // Invalidate saved leads query in case we've updated them
       queryClient.invalidateQueries({ queryKey: ['/api/saved-leads'] });
       // Invalidate search history
       queryClient.invalidateQueries({ queryKey: ['/api/search-history'] });
     },
     onError: (error) => {
+      setSearchResults(null);
+      const errorMessage = error instanceof Error ? error.message : "Failed to search for leads";
+      setSearchError(errorMessage);
+      
       toast({
         title: "Search Error",
-        description: error instanceof Error ? error.message : "Failed to search for leads",
+        description: errorMessage,
         variant: "destructive",
       });
     }

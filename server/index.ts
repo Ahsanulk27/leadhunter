@@ -1,6 +1,8 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import path from "path";
+import fs from "fs";
 
 const app = express();
 app.use(express.json());
@@ -58,7 +60,24 @@ app.use((req, res, next) => {
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
-    serveStatic(app);
+    // For production environment
+    try {
+      serveStatic(app);
+    } catch (error) {
+      console.error("Error serving static files:", error);
+      
+      // Fallback to serving the client/index.html directly
+      app.get('*', (req, res) => {
+        try {
+          const clientTemplateOriginal = path.resolve(import.meta.dirname, "..", "client", "index.html");
+          const html = fs.readFileSync(clientTemplateOriginal, 'utf8');
+          res.header('Content-Type', 'text/html').send(html);
+        } catch (err) {
+          console.error("Failed to serve fallback index.html:", err);
+          res.status(500).send("Server Error: Failed to load application");
+        }
+      });
+    }
   }
 
   // ALWAYS serve the app on port 5000
