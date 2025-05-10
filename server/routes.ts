@@ -30,13 +30,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { company, industry, location, position, size, prioritizeDecisionMakers } = req.body;
       
-      if (!company) {
-        return res.status(400).json({ error: "Company name is required" });
-      }
+      // Company name is now optional - we'll use industry + location for broader searches
+      const searchQuery = company || `${industry || 'real_estate'} in ${location || 'New York'}`;
 
       // Record search in history
       const searchHistoryData: InsertSearchHistory = {
-        query: company,
+        query: searchQuery,
         resultsCount: 0,
       };
       
@@ -44,10 +43,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // In a real application, we would scrape Google or use an API
       // For this demo, we'll simulate the scraping process with mock data
-      const scrapedData = await simulateScraping(company, industry, location);
+      const scrapedData = await simulateScraping(company || '', industry, location);
       
       if (!scrapedData) {
-        return res.status(404).json({ error: "No results found for this company" });
+        return res.status(404).json({ error: "No results found for this search" });
       }
 
       // Store company information
@@ -378,34 +377,34 @@ function generateIndustrySpecificData(category: string, companyName: string, loc
       return {
         name: companyName || "Tech Company",
         industry: "Technology",
-        subIndustry: industry || "Software Development",
+        subIndustry: "Software Development",
         location: location || "San Francisco, CA",
         size: "51-200",
         address: generateRandomAddress(location),
         founded: 2010 + Math.floor(Math.random() * 10),
-        contacts: generateTechContacts(3, companyName)
+        contacts: generateIndustryContacts(3, companyName || "TechCorp", "technology")
       };
     case 'finance':
       return {
         name: companyName || "Finance Corporation",
         industry: "Finance",
-        subIndustry: industry || "Financial Services",
+        subIndustry: "Financial Services",
         location: location || "New York, NY",
         size: "201-500",
         address: generateRandomAddress(location),
         founded: 1980 + Math.floor(Math.random() * 30),
-        contacts: generateFinanceContacts(3, companyName)
+        contacts: generateIndustryContacts(3, companyName || "FinanceCorp", "finance")
       };
     case 'healthcare':
       return {
         name: companyName || "Healthcare Organization",
         industry: "Healthcare",
-        subIndustry: industry || "Medical Services",
+        subIndustry: "Medical Services",
         location: location || "Boston, MA",
         size: "501+",
         address: generateRandomAddress(location),
         founded: 1970 + Math.floor(Math.random() * 40),
-        contacts: generateHealthcareContacts(3, companyName)
+        contacts: generateIndustryContacts(3, companyName || "HealthCorp", "healthcare")
       };
     case 'marketing':
       return {
