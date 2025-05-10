@@ -40,10 +40,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       await storage.createSearchHistory(searchHistoryData);
+
+      let scrapedData;
       
-      // In a real application, we would scrape Google or use an API
-      // For this demo, we'll simulate the scraping process with mock data
-      const scrapedData = await simulateScraping(company || '', industry, location);
+      // Try to use real data services first
+      try {
+        // Import our real data services
+        const { businessDataService } = await import('./api/business-data-service');
+        const { scraperService } = await import('./api/scraper-service');
+        
+        console.log("Attempting to fetch real business data...");
+        
+        // Get business data from our service
+        const businessData = await businessDataService.fetchBusinessData({
+          companyName: company,
+          industry,
+          location,
+          position,
+          size,
+          prioritizeDecisionMakers
+        });
+        
+        // If we have a company name or domain, enhance with web scraping
+        if (company) {
+          const domain = company.includes('.') ? company : 
+            company.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com';
+            
+          console.log(`Attempting to scrape website: ${domain}`);
+          const websiteData = await scraperService.scrapeCompanyWebsite(domain);
+          
+          // Add emails/phones to contacts if available
+          if (businessData.contacts && businessData.contacts.length && 
+              (websiteData.emails.length || websiteData.phones.length)) {
+            
+            businessData.contacts.forEach((contact: any, index: number) => {
+              if (!contact.email && websiteData.emails[index]) {
+                contact.email = websiteData.emails[index];
+              }
+              if (!contact.companyPhone && websiteData.phones[index]) {
+                contact.companyPhone = websiteData.phones[index];
+              }
+            });
+          }
+        }
+        
+        // If we successfully got real data, use it
+        if (businessData && businessData.company && businessData.contacts) {
+          scrapedData = {
+            name: businessData.company.name,
+            industry: businessData.company.industry,
+            location: businessData.company.location,
+            size: businessData.company.size,
+            address: businessData.company.address,
+            contacts: businessData.contacts
+          };
+          console.log("Successfully fetched real business data");
+        }
+      } catch (error) {
+        console.error("Error using real data services:", error);
+        console.log("Falling back to simulated data...");
+      }
+      
+      // If we couldn't get real data, fall back to simulated data
+      if (!scrapedData) {
+        scrapedData = await simulateScraping(company || '', industry, location);
+      }
       
       if (!scrapedData) {
         return res.status(404).json({ error: "No results found for this search" });
