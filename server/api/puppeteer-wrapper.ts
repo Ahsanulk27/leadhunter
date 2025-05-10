@@ -81,27 +81,108 @@ export class PuppeteerWrapper {
    * Launch a browser with proper configuration for scraping
    */
   async launch(): Promise<puppeteer.Browser> {
+    console.log('🤖 Launching browser with anti-detection measures...');
     return await puppeteer.launch({
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-web-security',
         '--disable-features=IsolateOrigins',
-        '--disable-site-isolation-trials'
+        '--disable-site-isolation-trials',
+        '--disable-accelerated-2d-canvas',
+        '--disable-gpu',
+        '--lang=en-US,en',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-breakpad',
+        '--disable-component-extensions-with-background-pages',
+        '--disable-features=TranslateUI,BlinkGenPropertyTrees',
+        '--disable-ipc-flooding-protection',
+        '--disable-renderer-backgrounding',
+        '--disable-dev-shm-usage',
+        '--enable-features=NetworkService',
+        '--hide-scrollbars',
+        '--metrics-recording-only',
+        '--mute-audio',
+        '--no-first-run',
+        '--use-gl=swiftshader',
+        '--window-size=1920,1080'
       ],
       // @ts-ignore - ignoreHTTPSErrors exists but TypeScript definition may be outdated
-      ignoreHTTPSErrors: true
+      ignoreHTTPSErrors: true,
+      headless: true
     });
   }
   
   /**
-   * Create a new page with a random user agent
+   * Create a new page with a random user agent and anti-detection measures
    */
   async createPage(browser: puppeteer.Browser): Promise<puppeteer.Page> {
     const page = await browser.newPage();
     
+    // Get random user agent
+    const userAgent = getRandomUserAgent();
+    console.log(`🤖 Setting user agent: ${userAgent}`);
+    
     // Set a random user agent
-    await page.setUserAgent(getRandomUserAgent());
+    await page.setUserAgent(userAgent);
+    
+    // Set viewport to a common desktop resolution
+    await page.setViewport({ width: 1920, height: 1080 });
+    
+    // Set language to English
+    await page.setExtraHTTPHeaders({
+      'Accept-Language': 'en-US,en;q=0.9'
+    });
+    
+    // Add more sophisticated browser fingerprinting evasion
+    await page.evaluateOnNewDocument(() => {
+      // Overwrite the 'plugins' property to use a custom getter
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => {
+          // Create a plugins array with common plugins
+          return [
+            {
+              0: {
+                type: 'application/pdf',
+                suffixes: 'pdf',
+                description: 'Portable Document Format'
+              },
+              name: 'Chrome PDF Plugin',
+              filename: 'internal-pdf-viewer',
+              description: 'Portable Document Format',
+              length: 1
+            },
+            {
+              0: {
+                type: 'application/x-google-chrome-pdf',
+                suffixes: 'pdf',
+                description: 'Portable Document Format'
+              },
+              name: 'Chrome PDF Viewer',
+              filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai',
+              description: 'Portable Document Format',
+              length: 1
+            }
+          ];
+        }
+      });
+      
+      // Override webdriver property
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => false
+      });
+      
+      // Override languages property
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['en-US', 'en']
+      });
+      
+      // Override platform property
+      Object.defineProperty(navigator, 'platform', {
+        get: () => 'Win32'
+      });
+    });
     
     // Add a method to wait for a timeout
     (page as any).waitForTimeout = async (timeout: number) => {
@@ -113,25 +194,52 @@ export class PuppeteerWrapper {
       return await this.checkForCaptcha(page);
     };
     
+    // Add a method to log the page HTML for debugging purposes
+    (page as any).logHtml = async () => {
+      const html = await page.content();
+      console.log('📄 PAGE HTML:', html.substring(0, 500) + '... [truncated]');
+      return html;
+    };
+    
     return page;
   }
   
   /**
-   * Navigate to a URL with randomized timing
+   * Navigate to a URL with randomized timing and ensure complete page load
    */
   async navigate(page: puppeteer.Page, url: string, options?: puppeteer.WaitForOptions): Promise<puppeteer.HTTPResponse | null> {
     try {
-      // Add a small random delay before navigation
-      await (page as any).waitForTimeout(getRandomDelay(500, 2000));
+      console.log(`🌐 Navigating to: ${url}`);
       
-      // Navigate to the URL
-      return await page.goto(url, {
-        waitUntil: 'networkidle2',
-        timeout: 20000,
+      // Add a small random delay before navigation to simulate human behavior
+      const preDelay = getRandomDelay(1000, 3000);
+      console.log(`⏱️ Pre-navigation delay: ${preDelay}ms`);
+      await (page as any).waitForTimeout(preDelay);
+      
+      // Log the navigation start
+      console.log(`🔄 Starting navigation to ${url}...`);
+      
+      // Navigate to the URL with longer timeout and networkidle0 for complete page load
+      const response = await page.goto(url, {
+        waitUntil: 'networkidle0', // Wait until there are no network connections for at least 500ms
+        timeout: 30000, // Increased timeout to 30 seconds
         ...options
       });
+      
+      // Log navigation completion
+      console.log(`✅ Navigation to ${url} complete`);
+      
+      // Random post-navigation delay to simulate reading the page
+      const postDelay = getRandomDelay(2000, 5000);
+      console.log(`⏱️ Post-navigation delay: ${postDelay}ms`);
+      await (page as any).waitForTimeout(postDelay);
+      
+      // Log the full HTML for verification
+      await (page as any).logHtml();
+      
+      return response;
     } catch (error) {
-      console.error(`Navigation error to ${url}:`, error);
+      console.error(`❌ Navigation error to ${url}:`, error);
       return null;
     }
   }

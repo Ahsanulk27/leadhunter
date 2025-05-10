@@ -23,7 +23,12 @@ export interface BusinessData {
   location: string;
   size: string;
   address: string;
+  phone?: string;
+  website?: string;
+  email?: string;
   contacts: any[];
+  scrapeSource?: string; // Tracking which source provided this data
+  scrapeTimestamp?: number;
 }
 
 export class SearchController {
@@ -155,19 +160,42 @@ export class SearchController {
       
       // Create the business data
       let scrapedData: BusinessData;
+      let scrapeSource = 'unknown';
+      
+      // Determine the source based on the place_id format or origin
+      if (topBusiness.place_id?.startsWith('dir-')) {
+        scrapeSource = 'industry-directory';
+      } else if (topBusiness.place_id?.startsWith('gm-')) {
+        scrapeSource = 'google-maps';
+      } else if (topBusiness.yelp_url) {
+        scrapeSource = 'yelp';
+      } else if (topBusiness.place_id?.startsWith('yp-')) {
+        scrapeSource = 'yellow-pages';
+      }
+      
+      console.log(`📍 SearchController: Creating business data from ${scrapeSource} source`);
       
       if (businessDetails) {
         // We have detailed business information
+        console.log(`📍 SearchController: Using detailed business information:`, JSON.stringify(businessDetails, null, 2));
+        
         scrapedData = {
           name: businessDetails.name,
           industry: params.industry || '',
           location: params.location || businessDetails.address || '',
           size: params.size || '',
           address: businessDetails.address || '',
-          contacts: businessDetails.contacts || []
+          phone: businessDetails.phone || '',
+          website: businessDetails.website || '',
+          email: businessDetails.email || '',
+          contacts: businessDetails.contacts || [],
+          scrapeSource,
+          scrapeTimestamp: Date.now()
         };
       } else {
         // Create basic data from the search result
+        console.log(`📍 SearchController: Using basic business information from search:`, JSON.stringify(topBusiness, null, 2));
+        
         scrapedData = {
           name: topBusiness.name,
           industry: params.industry || (topBusiness.types && topBusiness.types.length > 0 ? 
@@ -175,6 +203,9 @@ export class SearchController {
           location: params.location || topBusiness.vicinity || '',
           size: params.size || '',
           address: topBusiness.formatted_address || topBusiness.vicinity || '',
+          phone: topBusiness.phone || '',
+          website: topBusiness.website || '',
+          email: null,
           contacts: [{
             id: 1,
             name: `Contact at ${topBusiness.name}`,
@@ -186,10 +217,21 @@ export class SearchController {
             personalPhone: null,
             isDecisionMaker: true,
             influence: 75,
-            notes: 'Contact information from real business listing.'
-          }]
+            notes: `Contact information from ${scrapeSource} business listing.`
+          }],
+          scrapeSource,
+          scrapeTimestamp: Date.now()
         };
       }
+      
+      // Validate that we have real data - at least business name and either address or phone
+      if (!scrapedData.name || (!scrapedData.address && !scrapedData.phone)) {
+        console.error(`❌ SearchController: Insufficient business data - missing required fields`);
+        return null;
+      }
+      
+      console.log(`✅ SearchController: Successfully created business data for ${scrapedData.name}`);
+      
       
       return scrapedData;
     }
