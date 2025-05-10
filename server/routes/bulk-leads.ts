@@ -17,6 +17,77 @@ const bulkLeadSearchRequestSchema = z.object({
 export function registerBulkLeadRoutes(app: Express, googlePlacesService: GooglePlacesService) {
   const router = Router();
   
+  // Get available locations - Define this BEFORE the ID route to prevent route conflicts
+  router.get('/locations', async (_req: Request, res: Response) => {
+    try {
+      // Define a list of common locations for bulk lead searches
+      const availableLocations = [
+        'new_york',
+        'los_angeles',
+        'chicago',
+        'houston',
+        'phoenix',
+        'philadelphia',
+        'san_antonio',
+        'san_diego',
+        'dallas',
+        'san_jose',
+        'austin',
+        'jacksonville',
+        'san_francisco',
+        'columbus',
+        'fort_worth',
+        'indianapolis',
+        'charlotte',
+        'seattle',
+        'denver',
+        'washington_dc',
+        'boston',
+        'detroit',
+        'nashville',
+        'portland',
+        'las_vegas',
+        'atlanta',
+        'miami',
+        'minneapolis'
+      ];
+      
+      res.json({ locations: availableLocations });
+    } catch (error) {
+      console.error('Error fetching locations:', error);
+      res.status(500).json({ error: 'Failed to fetch available locations' });
+    }
+  });
+  
+  // Get available industries - Define this BEFORE the ID route to prevent route conflicts
+  router.get('/industries', async (_req: Request, res: Response) => {
+    try {
+      // Define industry categories for search filtering
+      const availableIndustries = [
+        'technology',
+        'healthcare',
+        'finance',
+        'education',
+        'real_estate',
+        'legal',
+        'manufacturing',
+        'retail',
+        'food_and_beverage',
+        'construction',
+        'automotive',
+        'entertainment',
+        'marketing',
+        'transportation',
+        'hospitality'
+      ];
+      
+      res.json({ industries: availableIndustries });
+    } catch (error) {
+      console.error('Error fetching industries:', error);
+      res.status(500).json({ error: 'Failed to fetch available industries' });
+    }
+  });
+  
   // Get all bulk lead searches
   router.get('/', async (_req: Request, res: Response) => {
     try {
@@ -28,7 +99,7 @@ export function registerBulkLeadRoutes(app: Express, googlePlacesService: Google
     }
   });
   
-  // Get a specific bulk lead search by ID
+  // Get a specific bulk lead search by ID - This should come AFTER other specific routes
   router.get('/:id', async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
@@ -97,8 +168,8 @@ export function registerBulkLeadRoutes(app: Express, googlePlacesService: Google
         : ['new_york', 'los_angeles', 'chicago', 'houston', 'dallas'];
       
       // Convert location codes to readable format for search
-      const formattedLocations = searchLocations.map(loc => 
-        loc.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+      const formattedLocations = searchLocations.map((loc: string) => 
+        loc.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
       );
       
       console.log(`📊 Bulk API Request: Searching for "${query}" in ${formattedLocations.length} locations`);
@@ -115,7 +186,7 @@ export function registerBulkLeadRoutes(app: Express, googlePlacesService: Google
         
         try {
           // Use the Google Places service to search
-          const results = await googlePlacesService.searchBusinessData({
+          const results = await googlePlacesService.searchBusinesses({
             query: query,
             location: location,
             limit: maxPerLocation
@@ -124,9 +195,9 @@ export function registerBulkLeadRoutes(app: Express, googlePlacesService: Google
           if (results && results.businesses) {
             // Filter for decision makers if requested
             if (onlyDecisionMakers) {
-              results.businesses.forEach(business => {
+              results.businesses.forEach((business: any) => {
                 if (business.contacts && business.contacts.length > 0) {
-                  business.contacts = business.contacts.filter(contact => 
+                  business.contacts = business.contacts.filter((contact: any) => 
                     contact.isDecisionMaker === true
                   );
                 }
@@ -135,7 +206,7 @@ export function registerBulkLeadRoutes(app: Express, googlePlacesService: Google
             
             // Count results
             const businessCount = results.businesses.length;
-            const contactCount = results.businesses.reduce((count, business) => 
+            const contactCount = results.businesses.reduce((count: number, business: any) => 
               count + (business.contacts ? business.contacts.length : 0), 0
             );
             
@@ -344,77 +415,6 @@ export function registerBulkLeadRoutes(app: Express, googlePlacesService: Google
     } catch (error) {
       console.error('Error generating direct CSV export:', error);
       res.status(500).json({ error: 'Failed to generate CSV export' });
-    }
-  });
-  
-  // Get available locations
-  router.get('/locations', async (_req: Request, res: Response) => {
-    try {
-      // Define a list of common locations for bulk lead searches
-      const availableLocations = [
-        'new_york',
-        'los_angeles',
-        'chicago',
-        'houston',
-        'phoenix',
-        'philadelphia',
-        'san_antonio',
-        'san_diego',
-        'dallas',
-        'san_jose',
-        'austin',
-        'jacksonville',
-        'san_francisco',
-        'columbus',
-        'fort_worth',
-        'indianapolis',
-        'charlotte',
-        'seattle',
-        'denver',
-        'washington_dc',
-        'boston',
-        'detroit',
-        'nashville',
-        'portland',
-        'las_vegas',
-        'atlanta',
-        'miami',
-        'minneapolis'
-      ];
-      
-      res.json({ locations: availableLocations });
-    } catch (error) {
-      console.error('Error fetching locations:', error);
-      res.status(500).json({ error: 'Failed to fetch available locations' });
-    }
-  });
-  
-  // Get available industries
-  router.get('/industries', async (_req: Request, res: Response) => {
-    try {
-      // Define industry categories for search filtering
-      const availableIndustries = [
-        'technology',
-        'healthcare',
-        'finance',
-        'education',
-        'real_estate',
-        'legal',
-        'manufacturing',
-        'retail',
-        'food_and_beverage',
-        'construction',
-        'automotive',
-        'entertainment',
-        'marketing',
-        'transportation',
-        'hospitality'
-      ];
-      
-      res.json({ industries: availableIndustries });
-    } catch (error) {
-      console.error('Error fetching industries:', error);
-      res.status(500).json({ error: 'Failed to fetch available industries' });
     }
   });
   
