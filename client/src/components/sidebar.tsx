@@ -21,6 +21,11 @@ export default function Sidebar() {
       icon: <Search className="w-6 h-6" />,
     },
     {
+      title: "Bulk Leads",
+      href: "/bulk-leads",
+      icon: <Globe className="w-6 h-6" />,
+    },
+    {
       title: "My Leads",
       href: "/my-leads",
       icon: <Table className="w-6 h-6" />,
