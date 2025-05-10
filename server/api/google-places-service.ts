@@ -301,25 +301,129 @@ export class GooglePlacesService {
   /**
    * Generate contact information from place data
    * Since Google Places API doesn't provide contact persons,
-   * we'll generate realistic contact information based on the business name
+   * we'll generate multiple realistic contacts based on the business information
    */
   private generateContactsFromPlace(place: any, details: any): Contact[] {
-    // Get the business name to generate contacts
+    // Get the business name and category to generate appropriate contacts
     const businessName = place.name;
+    const businessCategories = place.types || [];
+    const contacts: Contact[] = [];
+    const phoneNumber = details.formatted_phone_number || '';
     
-    // Create a primary contact (usually a manager/owner)
+    // Determine business type for appropriate contact generation
+    const isRetail = businessCategories.some((cat: string) => 
+      ['store', 'shop', 'retail', 'clothing_store', 'shopping_mall', 'department_store'].includes(cat));
+      
+    const isRestaurant = businessCategories.some((cat: string) => 
+      ['restaurant', 'food', 'cafe', 'bar', 'bakery', 'meal_delivery'].includes(cat));
+      
+    const isTech = businessCategories.some((cat: string) => 
+      ['electronics_store', 'point_of_interest', 'establishment'].includes(cat));
+      
+    const isService = businessCategories.some((cat: string) => 
+      ['lawyer', 'doctor', 'health', 'dentist', 'hospital', 'insurance_agency', 'real_estate_agency', 'finance'].includes(cat));
+    
+    // Generate domain for email addresses from website if available
+    let emailDomain = '';
+    try {
+      if (details.website) {
+        emailDomain = new URL(details.website).hostname.replace('www.', '');
+      }
+    } catch (e) {
+      // If website URL is invalid, use a fallback approach
+      emailDomain = businessName.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com';
+    }
+    
+    // Create a primary contact (General contact/reception)
     const primaryContact: Contact = {
       contactId: uuidv4(),
-      name: 'Contact via Website',
-      position: 'Primary Contact',
-      email: details.website ? `contact@${new URL(details.website).hostname.replace('www.', '')}` : '',
-      phoneNumber: details.formatted_phone_number || '',
+      name: 'Main Contact',
+      position: 'Reception',
+      email: emailDomain ? `contact@${emailDomain}` : '',
+      phoneNumber: phoneNumber,
+      isDecisionMaker: false,
+      companyName: businessName,
+      companyId: place.place_id
+    };
+    contacts.push(primaryContact);
+    
+    // Generate an appropriate manager contact based on business type
+    let managerTitle = 'Manager';
+    if (isRestaurant) {
+      managerTitle = 'Restaurant Manager';
+    } else if (isRetail) {
+      managerTitle = 'Store Manager';
+    } else if (isTech) {
+      managerTitle = 'Operations Manager';
+    } else if (isService) {
+      managerTitle = 'Office Manager';
+    }
+    
+    const managerContact: Contact = {
+      contactId: uuidv4(),
+      name: `Manager`,
+      position: managerTitle,
+      email: emailDomain ? `manager@${emailDomain}` : '',
+      phoneNumber: phoneNumber,
       isDecisionMaker: true,
       companyName: businessName,
       companyId: place.place_id
     };
+    contacts.push(managerContact);
     
-    return [primaryContact];
+    // Generate owner/director contact for decision making
+    const ownerContact: Contact = {
+      contactId: uuidv4(),
+      name: `Owner`,
+      position: isService ? 'Director' : (isRestaurant ? 'Owner' : 'CEO'),
+      email: emailDomain ? `owner@${emailDomain}` : '',
+      phoneNumber: phoneNumber,
+      isDecisionMaker: true,
+      companyName: businessName,
+      companyId: place.place_id
+    };
+    contacts.push(ownerContact);
+    
+    // If retail or restaurant, add customer service
+    if (isRetail || isRestaurant) {
+      contacts.push({
+        contactId: uuidv4(),
+        name: `Customer Service`,
+        position: 'Customer Relations',
+        email: emailDomain ? `support@${emailDomain}` : '',
+        phoneNumber: phoneNumber,
+        isDecisionMaker: false,
+        companyName: businessName,
+        companyId: place.place_id
+      });
+    }
+    
+    // If tech company or service, add sales and marketing contacts
+    if (isTech || isService) {
+      contacts.push({
+        contactId: uuidv4(),
+        name: `Sales Department`,
+        position: 'Sales Manager',
+        email: emailDomain ? `sales@${emailDomain}` : '',
+        phoneNumber: phoneNumber,
+        isDecisionMaker: false,
+        companyName: businessName,
+        companyId: place.place_id
+      });
+      
+      contacts.push({
+        contactId: uuidv4(),
+        name: `Marketing Department`,
+        position: 'Marketing Director',
+        email: emailDomain ? `marketing@${emailDomain}` : '',
+        phoneNumber: phoneNumber,
+        isDecisionMaker: true,
+        companyName: businessName,
+        companyId: place.place_id
+      });
+    }
+    
+    return contacts;
   }
 }
 
