@@ -1,119 +1,88 @@
-import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
-import path from "path";
-import fs from "fs";
-import { runStartupOperations, schedulePeriodicHealthChecks } from "./startup";
+/**
+ * Main entry point for the NexLead application
+ */
 
+import express, { Request, Response, NextFunction, Express } from 'express';
+import session from 'express-session';
+import path from 'path';
+import { setupVite, serveStatic, log } from './vite';
+import { runStartupOperations, schedulePeriodicHealthChecks } from './startup';
+import scrapeRoutes from './routes/scrape-routes';
+import { v4 as uuidv4 } from 'uuid';
+
+// Create Express app
 const app = express();
+const port = process.env.PORT || 5000;
+
+// JSON body parser
 app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
 
-// Make sure API endpoints don't conflict with frontend routes
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.status(200).send('OK');
-});
+// Session middleware
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'nexlead-secret-key',
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: process.env.NODE_ENV === 'production' }
+  })
+);
 
-// Remove any root route handler that might override the frontend
-app.get('/', (req, res, next) => {
-  if (req.headers.accept?.includes('text/html')) {
-    // Let the static file handler or Vite handle HTML requests
-    next();
-  } else {
-    // For non-HTML requests (like API health checks), respond with simple OK
-    res.status(200).send('API running');
-  }
-});
+// Register routes
+app.use(scrapeRoutes);
 
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      log(logLine);
-    }
+// Simple health check endpoint
+app.get('/api/health', (req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0'
   });
-
-  next();
 });
 
-(async () => {
-  const server = await registerRoutes(app);
-
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    throw err;
+// Error handler
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  console.error('❌ Server error:', err);
+  
+  res.status(500).json({
+    error: 'Internal server error',
+    error_code: 'SERVER_ERROR',
+    timestamp: new Date().toISOString(),
+    request_id: uuidv4(),
+    details: process.env.NODE_ENV === 'development' ? { message: err.message, stack: err.stack } : undefined
   });
+});
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    // For production environment
-    try {
-      serveStatic(app);
-    } catch (error) {
-      console.error("Error serving static files:", error);
-      
-      // Fallback to serving the client/index.html directly
-      app.get('*', (req, res) => {
-        try {
-          const clientTemplateOriginal = path.resolve(import.meta.dirname, "..", "client", "index.html");
-          const html = fs.readFileSync(clientTemplateOriginal, 'utf8');
-          res.header('Content-Type', 'text/html').send(html);
-        } catch (err) {
-          console.error("Failed to serve fallback index.html:", err);
-          res.status(500).send("Server Error: Failed to load application");
-        }
-      });
-    }
-  }
-
-  // ALWAYS serve the app on port 5000
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = 5000;
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
+// Setup Vite for development
+async function startServer(app: Express) {
+  if (process.env.NODE_ENV === 'development') {
+    const server = await setupVite(app);
     
-    // Run startup operations after server is started
-    runStartupOperations()
-      .then(() => {
-        log('Startup operations completed successfully');
-        
-        // Schedule periodic health checks
-        schedulePeriodicHealthChecks();
-      })
-      .catch(err => {
-        console.error('Error during startup operations:', err);
-      });
-  });
-})();
+    // Run startup operations
+    await runStartupOperations();
+    
+    // Schedule periodic health checks
+    schedulePeriodicHealthChecks();
+    
+    return server;
+  } else {
+    // Serve static files in production
+    serveStatic(app);
+    
+    const server = app.listen(port, () => {
+      log(`serving on port ${port}`);
+    });
+    
+    // Run startup operations
+    await runStartupOperations();
+    
+    // Schedule periodic health checks
+    schedulePeriodicHealthChecks();
+    
+    return server;
+  }
+}
+
+startServer(app).catch(err => {
+  console.error('❌ Failed to start server:', err);
+  process.exit(1);
+});
