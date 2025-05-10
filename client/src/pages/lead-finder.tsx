@@ -32,37 +32,68 @@ export default function LeadFinder() {
     mutationFn: async (searchData: any) => {
       setIsLoading(true);
       setSearchError(null);
+      
       try {
-        const response = await apiRequest('POST', '/api/search', searchData);
-        const data = await response.json();
+        // Note: We're using fetch directly here instead of apiRequest to handle response errors manually
+        console.log("Sending search request with data:", searchData);
         
-        // Check if the response contains an error
-        if (!response.ok || (data && data.error)) {
-          console.error("Search API error:", data.error);
+        const response = await fetch('/api/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(searchData)
+        });
+        
+        console.log(`Response status: ${response.status} ${response.statusText}`);
+        
+        // Parse the response data
+        const responseText = await response.text();
+        console.log("Raw response:", responseText);
+        
+        let data;
+        try {
+          data = JSON.parse(responseText);
+        } catch (e) {
+          console.error("Failed to parse JSON response:", e);
+          throw new Error(`Invalid response from server: ${responseText}`);
+        }
+        
+        // Check for error in the response
+        if (!response.ok) {
+          console.error("Search error - status:", response.status, "data:", data);
           
-          // Handle specific API errors
-          if (data.error && data.error.code === 'PLACES_API_REQUEST_DENIED') {
-            throw new Error(
-              "Google Places API access is currently unavailable. Please enable the Places API for your Google API key."
-            );
-          } else if (data.error && data.error.code === 'PLACES_API_QUERY_LIMIT') {
-            throw new Error(
-              "We've reached our daily search limit. Please try again tomorrow."
-            );
-          } else if (data.error && data.error.code === 'PLACES_API_ERROR') {
-            throw new Error(data.error.message || "Google Places API error encountered");
+          // Handle specific error types
+          if (data && data.error) {
+            if (typeof data.error === 'object' && data.error.code) {
+              if (data.error.code === 'PLACES_API_REQUEST_DENIED') {
+                throw new Error(
+                  "Google Places API access is currently unavailable. Please enable the Places API for your Google API key."
+                );
+              } else if (data.error.code === 'PLACES_API_QUERY_LIMIT') {
+                throw new Error(
+                  "We've reached our daily search limit. Please try again tomorrow."
+                );
+              } else {
+                throw new Error(data.error.message || "API error: " + data.error.code);
+              }
+            } else {
+              throw new Error(typeof data.error === 'string' ? data.error : "An error occurred during search");
+            }
           } else {
-            const errorMessage = data.message || (data.error && data.error.message) || "Failed to search for leads";
-            throw new Error(errorMessage);
+            throw new Error(`API error (${response.status}): ${response.statusText}`);
           }
         }
         
+        // If we've got valid data, return it
         return data;
+      } catch (error) {
+        console.error("Search request failed:", error);
+        throw error;
       } finally {
         setIsLoading(false);
       }
     },
     onSuccess: (data) => {
+      console.log("Search successful, got data:", data);
       setSearchResults(data);
       setSearchError(null);
       // Invalidate saved leads query in case we've updated them
@@ -71,6 +102,7 @@ export default function LeadFinder() {
       queryClient.invalidateQueries({ queryKey: ['/api/search-history'] });
     },
     onError: (error) => {
+      console.error("Search mutation error:", error);
       setSearchResults(null);
       const errorMessage = error instanceof Error ? error.message : "Failed to search for leads";
       setSearchError(errorMessage);
