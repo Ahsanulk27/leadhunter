@@ -273,17 +273,26 @@ const BulkLeadGenerator: React.FC = () => {
         form.action = exportUrl;
         form.target = '_blank'; // Open in new tab
         
-        // Add hidden fields for data
-        const dataField = document.createElement('input');
-        dataField.type = 'hidden';
-        dataField.name = 'data';
-        dataField.value = JSON.stringify({
-          searchTerm,
-          locations: selectedLocations,
-          businesses: results.businesses
-        });
+        // Add hidden fields for data - need separate fields for iOS to handle properly
+        const searchTermField = document.createElement('input');
+        searchTermField.type = 'hidden';
+        searchTermField.name = 'searchTerm';
+        searchTermField.value = searchTerm;
+        form.appendChild(searchTermField);
         
-        form.appendChild(dataField);
+        const locationsField = document.createElement('input');
+        locationsField.type = 'hidden';
+        locationsField.name = 'locations';
+        locationsField.value = JSON.stringify(selectedLocations);
+        form.appendChild(locationsField);
+        
+        // The businesses need to be a hidden field
+        const businessesField = document.createElement('input');
+        businessesField.type = 'hidden';
+        businessesField.name = 'businesses';
+        businessesField.value = JSON.stringify(results.businesses);
+        
+        form.appendChild(businessesField);
         document.body.appendChild(form);
         form.submit();
         

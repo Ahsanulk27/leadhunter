@@ -345,22 +345,32 @@ export function registerBulkLeadRoutes(app: Express, googlePlacesService: Google
       // Handle both JSON body and form data for iOS compatibility
       let searchTerm, locations, businesses;
       
-      if (req.body.data && typeof req.body.data === 'string') {
-        // This is from the form submission for iOS
+      console.log("Received export request with body:", typeof req.body, Object.keys(req.body));
+      
+      // This handles form submissions from iOS and direct JSON POSTs
+      searchTerm = req.body.searchTerm;
+      
+      // Locations could be a string (from form) or an array (from JSON)
+      if (req.body.locations && typeof req.body.locations === 'string') {
         try {
-          console.log("Parsing form data for iOS");
-          const formData = JSON.parse(req.body.data);
-          searchTerm = formData.searchTerm;
-          locations = formData.locations;
-          businesses = formData.businesses;
-        } catch (parseError) {
-          console.error("Error parsing form data:", parseError);
-          return res.status(400).json({ error: 'Invalid form data format' });
+          locations = JSON.parse(req.body.locations);
+        } catch (e) {
+          locations = [req.body.locations]; // Fallback if it's a single location string
         }
       } else {
-        // This is from the direct JSON POST
-        searchTerm = req.body.searchTerm;
-        locations = req.body.locations;
+        locations = req.body.locations || [];
+      }
+      
+      // Businesses could be a string (from form) or an array (from JSON)
+      if (req.body.businesses && typeof req.body.businesses === 'string') {
+        try {
+          businesses = JSON.parse(req.body.businesses);
+          console.log(`Successfully parsed ${businesses.length} businesses from form data`);
+        } catch (parseError) {
+          console.error("Error parsing businesses from form data:", parseError);
+          return res.status(400).json({ error: 'Invalid businesses data format' });
+        }
+      } else {
         businesses = req.body.businesses;
       }
       

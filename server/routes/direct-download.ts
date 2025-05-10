@@ -21,10 +21,13 @@ export function registerDirectDownloadRoutes(app: Express) {
   // CSV direct download endpoint - specifically optimized for iOS devices
   router.get('/csv', async (req: Request, res: Response) => {
     try {
-      const { filename, searchTerm } = req.query;
+      let filename = req.query.filename as string;
+      const searchTerm = req.query.searchTerm as string;
       
       if (!filename) {
-        return res.status(400).json({ error: 'Filename is required' });
+        // Generate a default filename if none provided
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        filename = `nexlead_export_${timestamp}.csv`;
       }
       
       // Add a proper content type for CSV
@@ -114,8 +117,11 @@ export function registerDirectDownloadRoutes(app: Express) {
           }
         });
       } else {
-        // Add some columns to create a valid CSV even if no data is available
-        csvRows.push('"No results available","","","","","","","","",""');
+        // If this is direct access (without form submission), show a helpful message
+        // Instead of empty rows
+        console.log('No business data in storage for CSV generation. Direct URL access?');
+        csvRows.push('"For best results, please search for leads first, then use the Export button","","","","","","","","",""');
+        csvRows.push('"This CSV was generated without search data","","","","","","","","",""');
       }
       
       // Create the CSV content
