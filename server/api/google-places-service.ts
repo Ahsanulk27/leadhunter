@@ -32,7 +32,7 @@ export class GooglePlacesService {
   /**
    * Search for businesses using Google Places API
    */
-  async searchBusinesses(query: string, location?: string): Promise<{
+  async searchBusinesses(query: string, location?: string, maxResults: number = 100): Promise<{
     businesses: BusinessData[];
     sources: string[];
     error?: {
@@ -40,7 +40,7 @@ export class GooglePlacesService {
       message: string;
     };
   }> {
-    console.log(`🔍 GooglePlacesService: Searching for '${query}' in ${location || 'any location'}`);
+    console.log(`🔍 GooglePlacesService: Searching for '${query}' in ${location || 'any location'}, max results: ${maxResults}`);
     
     if (!this.apiKey) {
       console.error('❌ GooglePlacesService: No API key available');
@@ -56,14 +56,17 @@ export class GooglePlacesService {
       
       // Call the Places API Text Search endpoint
       const textSearchUrl = 'https://maps.googleapis.com/maps/api/place/textsearch/json';
-      const response = await axios.get(textSearchUrl, {
+      let response = await axios.get(textSearchUrl, {
         params: {
           query: searchQuery,
           key: this.apiKey
         }
       });
       
-      const data: PlacesSearchResult = response.data;
+      let data: PlacesSearchResult = response.data;
+      let allResults: any[] = [];
+      let pageCount = 0;
+      const MAX_PAGES = 3; // Limit to 3 pages of results to avoid rate limiting
       
       if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
         const errorMessage = `❌ GooglePlacesService: API error: ${data.status}`;
@@ -101,18 +104,69 @@ export class GooglePlacesService {
         }
       }
       
-      if (data.results.length === 0) {
+      // Collect all results from first page
+      if (data.results && data.results.length > 0) {
+        allResults = [...allResults, ...data.results];
+        pageCount++;
+        console.log(`✅ GooglePlacesService: Found ${data.results.length} places on page ${pageCount}`);
+      }
+      
+      // Get next pages if we have a next_page_token and haven't reached max results
+      while (data.next_page_token && allResults.length < maxResults && pageCount < MAX_PAGES) {
+        // Need to wait a bit before using the next page token
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        try {
+          // Get the next page of results
+          response = await axios.get(textSearchUrl, {
+            params: {
+              pagetoken: data.next_page_token,
+              key: this.apiKey
+            }
+          });
+          
+          data = response.data;
+          
+          if (data.status === 'OK' && data.results && data.results.length > 0) {
+            // Check for duplicates before adding
+            const newResults = data.results.filter(newPlace => 
+              !allResults.some(existingPlace => existingPlace.place_id === newPlace.place_id)
+            );
+            
+            console.log(`✅ GooglePlacesService: Found ${data.results.length} places on page ${pageCount + 1}, ${newResults.length} new unique results`);
+            
+            allResults = [...allResults, ...newResults];
+            pageCount++;
+          }
+        } catch (error) {
+          console.error(`❌ GooglePlacesService: Error fetching next page:`, error);
+          break;
+        }
+      }
+      
+      if (allResults.length === 0) {
         console.log('❌ GooglePlacesService: No results found');
         return { businesses: [], sources: [] };
       }
       
-      console.log(`✅ GooglePlacesService: Found ${data.results.length} places`);
+      console.log(`✅ GooglePlacesService: Found ${allResults.length} total places across ${pageCount} pages`);
       
       // Process the results
       const businesses: BusinessData[] = [];
+      // Track place IDs to avoid duplicates
+      const processedPlaceIds = new Set<string>();
       
-      for (const place of data.results) {
+      for (const place of allResults) {
         try {
+          // Skip if we've already processed this place
+          if (processedPlaceIds.has(place.place_id)) {
+            console.log(`⚠️ GooglePlacesService: Skipping duplicate place: ${place.name}`);
+            continue;
+          }
+          
+          // Mark as processed
+          processedPlaceIds.add(place.place_id);
+          
           // Get the place details to get more information
           const details = await this.getPlaceDetails(place.place_id);
           
@@ -137,6 +191,12 @@ export class GooglePlacesService {
           };
           
           businesses.push(business);
+          
+          // Stop if we've reached the max results
+          if (businesses.length >= maxResults) {
+            console.log(`✅ GooglePlacesService: Reached maximum of ${maxResults} results`);
+            break;
+          }
         } catch (error) {
           console.error(`❌ GooglePlacesService: Error processing place:`, error);
         }

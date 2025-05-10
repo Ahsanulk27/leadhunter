@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,8 +33,10 @@ export default function SearchResults({ results, isLoading, onSaveLead, onExport
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [filterDecisionMakers, setFilterDecisionMakers] = useState(false);
+  const [pageLoadTimes, setPageLoadTimes] = useState<{[key: number]: number}>({});
   
-  const itemsPerPage = 5;
+  // Increased to 50 items per page as requested
+  const itemsPerPage = 50;
   
   // Debugging: log the entire results object
   console.log("DEBUG SearchResults component - received results:", results);
@@ -84,9 +86,41 @@ export default function SearchResults({ results, isLoading, onSaveLead, onExport
     }
   };
   
-  // Handle pagination
+  // Use effect to track page load times
+  useEffect(() => {
+    const startTime = performance.now();
+    
+    return () => {
+      const endTime = performance.now();
+      const loadTime = endTime - startTime;
+      
+      // Update the page load time for the current page
+      setPageLoadTimes(prev => ({
+        ...prev,
+        [currentPage]: loadTime
+      }));
+      
+      console.log(`DEBUG: Page ${currentPage} load time: ${loadTime}ms`);
+      console.log(`DEBUG: All page load times:`, pageLoadTimes);
+    };
+  }, [currentPage]);
+  
+  // Handle pagination with performance tracking
   const goToPage = (page: number) => {
-    setCurrentPage(Math.min(Math.max(1, page), totalPages));
+    const validPage = Math.min(Math.max(1, page), totalPages);
+    
+    // Only change if it's a different page
+    if (validPage !== currentPage) {
+      console.log(`DEBUG: Navigating from page ${currentPage} to page ${validPage}`);
+      const startTime = performance.now();
+      
+      // Log the current page before changing
+      if (pageLoadTimes[currentPage]) {
+        console.log(`DEBUG: Page ${currentPage} load time was ${pageLoadTimes[currentPage]}ms`);
+      }
+      
+      setCurrentPage(validPage);
+    }
   };
 
   return (
@@ -235,6 +269,11 @@ export default function SearchResults({ results, isLoading, onSaveLead, onExport
                     <span className="font-medium">{Math.min(startIndex + itemsPerPage, filteredContacts.length)}</span> of{" "}
                     <span className="font-medium">{filteredContacts.length}</span> results
                   </p>
+                  {Object.keys(pageLoadTimes).length > 0 && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Current page load time: {pageLoadTimes[currentPage] ? `${Math.round(pageLoadTimes[currentPage])}ms` : 'Calculating...'}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center space-x-2">
                   <Button
@@ -246,17 +285,68 @@ export default function SearchResults({ results, isLoading, onSaveLead, onExport
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  {[...Array(totalPages)].map((_, i) => (
-                    <Button
-                      key={i}
-                      variant={currentPage === i + 1 ? "default" : "outline"}
-                      size="sm"
-                      className="px-4 py-2"
-                      onClick={() => goToPage(i + 1)}
-                    >
-                      {i + 1}
-                    </Button>
-                  ))}
+                  
+                  {/* Pagination with ellipsis for many pages */}
+                  {(() => {
+                    const pageNumbers = [];
+                    const maxVisiblePages = 5;
+                    
+                    if (totalPages <= maxVisiblePages) {
+                      // Show all pages if there are few
+                      for (let i = 1; i <= totalPages; i++) {
+                        pageNumbers.push(i);
+                      }
+                    } else {
+                      // Show first page
+                      pageNumbers.push(1);
+                      
+                      // Show ellipsis and pages around current
+                      if (currentPage > 3) {
+                        pageNumbers.push('ellipsis1');
+                      }
+                      
+                      // Pages around current
+                      const startPage = Math.max(2, currentPage - 1);
+                      const endPage = Math.min(totalPages - 1, currentPage + 1);
+                      
+                      for (let i = startPage; i <= endPage; i++) {
+                        pageNumbers.push(i);
+                      }
+                      
+                      // Show ellipsis and last page
+                      if (currentPage < totalPages - 2) {
+                        pageNumbers.push('ellipsis2');
+                      }
+                      
+                      // Last page
+                      if (totalPages > 1) {
+                        pageNumbers.push(totalPages);
+                      }
+                    }
+                    
+                    return pageNumbers.map((page, index) => {
+                      if (page === 'ellipsis1' || page === 'ellipsis2') {
+                        return (
+                          <span key={`ellipsis-${index}`} className="px-2">
+                            ...
+                          </span>
+                        );
+                      }
+                      
+                      return (
+                        <Button
+                          key={`page-${page}`}
+                          variant={currentPage === page ? "default" : "outline"}
+                          size="sm"
+                          className="px-4 py-2"
+                          onClick={() => goToPage(page as number)}
+                        >
+                          {page}
+                        </Button>
+                      );
+                    });
+                  })()}
+                  
                   <Button
                     variant="outline"
                     size="sm"
