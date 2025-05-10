@@ -47,6 +47,7 @@ import { apiRequest } from "@/lib/queryClient";
 interface ConsumerLead {
   id: string;
   name: string;
+  jobTitle: string;
   phoneNumber: string;
   email: string;
   address: string;
