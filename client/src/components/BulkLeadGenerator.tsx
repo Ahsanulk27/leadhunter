@@ -34,41 +34,96 @@ const BulkLeadGenerator: React.FC = () => {
   const [industries, setIndustries] = useState<Industry[]>([]);
   const [results, setResults] = useState<any>(null);
   
+  // Load saved results from session storage on component mount
+  useEffect(() => {
+    const savedSearch = window.sessionStorage.getItem('bulkLeadResults');
+    if (savedSearch) {
+      try {
+        const parsedResults = JSON.parse(savedSearch);
+        console.log("Loaded saved search results from session storage:", parsedResults);
+        setResults(parsedResults);
+        
+        // Also restore the search term
+        const savedSearchTerm = window.sessionStorage.getItem('bulkLeadSearchTerm');
+        if (savedSearchTerm) {
+          setSearchTerm(savedSearchTerm);
+        }
+        
+        // Restore selected locations
+        const savedLocations = window.sessionStorage.getItem('bulkLeadSelectedLocations');
+        if (savedLocations) {
+          setSelectedLocations(JSON.parse(savedLocations));
+        }
+      } catch (err) {
+        console.error("Error restoring saved search:", err);
+        // Clear corrupted data
+        window.sessionStorage.removeItem('bulkLeadResults');
+      }
+    }
+  }, []);
+  
   const { toast } = useToast();
   
   // Fetch available locations and industries on component mount
   useEffect(() => {
     const fetchLocationsAndIndustries = async () => {
       try {
-        const [locationsResponse, industriesResponse] = await Promise.all([
-          fetch('/api/bulk-leads/locations'),
-          fetch('/api/bulk-leads/industries')
-        ]);
+        // Add a timestamp to prevent caching issues
+        const timestamp = new Date().getTime();
+        console.log("Fetching locations and industries...");
+        
+        // Fetch locations
+        const locationsUrl = `/api/bulk-leads/locations?_=${timestamp}`;
+        console.log("Locations URL:", locationsUrl);
+        const locationsResponse = await fetch(locationsUrl);
+        console.log("Locations response status:", locationsResponse.status);
         
         if (locationsResponse.ok) {
           const locationsData = await locationsResponse.json();
-          // Format locations for display
-          const formattedLocations = locationsData.locations.map((loc: string) => ({
-            name: loc,
-            displayName: loc.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
-          }));
-          setLocations(formattedLocations);
+          console.log("Received locations data:", locationsData);
+          
+          if (locationsData.locations && Array.isArray(locationsData.locations)) {
+            // Format locations for display
+            const formattedLocations = locationsData.locations.map((loc: string) => ({
+              name: loc,
+              displayName: loc.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+            }));
+            console.log("Formatted locations:", formattedLocations);
+            setLocations(formattedLocations);
+          } else {
+            console.error("Invalid locations data format:", locationsData);
+          }
+        } else {
+          console.error("Failed to fetch locations:", await locationsResponse.text());
         }
+        
+        // Fetch industries
+        const industriesUrl = `/api/bulk-leads/industries?_=${timestamp}`;
+        const industriesResponse = await fetch(industriesUrl);
+        console.log("Industries response status:", industriesResponse.status);
         
         if (industriesResponse.ok) {
           const industriesData = await industriesResponse.json();
-          // Format industries for display
-          const formattedIndustries = industriesData.industries.map((ind: string) => ({
-            name: ind,
-            displayName: ind.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
-          }));
-          setIndustries(formattedIndustries);
+          console.log("Received industries data:", industriesData);
+          
+          if (industriesData.industries && Array.isArray(industriesData.industries)) {
+            // Format industries for display
+            const formattedIndustries = industriesData.industries.map((ind: string) => ({
+              name: ind,
+              displayName: ind.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+            }));
+            setIndustries(formattedIndustries);
+          } else {
+            console.error("Invalid industries data format:", industriesData);
+          }
+        } else {
+          console.error("Failed to fetch industries:", await industriesResponse.text());
         }
       } catch (error) {
         console.error('Error fetching locations and industries:', error);
         toast({
           title: 'Failed to load options',
-          description: 'Could not load available locations and industries.',
+          description: 'Could not load available locations and industries. Please refresh the page.',
           variant: 'destructive'
         });
       }
@@ -120,6 +175,40 @@ const BulkLeadGenerator: React.FC = () => {
       
       const data = await response.json();
       setResults(data);
+      
+      // Save results to session storage for persistence between tab navigation
+      try {
+        // Save the results
+        window.sessionStorage.setItem('bulkLeadResults', JSON.stringify(data));
+        // Save the search term
+        window.sessionStorage.setItem('bulkLeadSearchTerm', searchTerm);
+        // Save selected locations
+        window.sessionStorage.setItem('bulkLeadSelectedLocations', JSON.stringify(selectedLocations));
+        
+        console.log("Saved search results to session storage");
+      } catch (err) {
+        console.error("Error saving search results to session storage:", err);
+        // Non-critical error, don't show to user
+      }
+      
+      // Save to database using the API
+      try {
+        fetch('/api/bulk-leads', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            searchTerm,
+            locations: selectedLocations,
+            businesses: data.businesses
+          })
+        });
+        // This is a non-blocking operation, we don't need to await it
+      } catch (err) {
+        console.error("Error saving to database:", err);
+        // Non-critical error, don't show to user
+      }
       
       // Show success message
       toast({
