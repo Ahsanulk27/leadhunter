@@ -236,6 +236,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ error: "Error fetching search history" });
     }
   });
+  
+  // Dedicated /scrape API endpoint for direct access with query parameters
+  app.get("/scrape", async (req: Request, res: Response) => {
+    try {
+      console.log(`🔍 API /scrape route called with query parameters:`, req.query);
+      
+      // Extract query parameters
+      const query = req.query.query as string || '';
+      const location = req.query.location as string || '';
+      
+      if (!query && !location) {
+        console.log(`❌ Missing required query parameters (query or location)`);
+        return res.status(400).json({
+          error: "Missing parameters",
+          message: "Please provide at least one of: 'query' (company or industry) or 'location' parameter",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      console.log(`🔍 Processing scrape request for query: '${query}', location: '${location}'`);
+      
+      // Import our search controller which coordinates all data sources
+      const { searchController } = await import('./controllers/search-controller');
+      
+      // Determine if the query is likely a company name or an industry
+      // Heuristic: Company names typically have capitalized words or special characters
+      const isCompanyName = /[A-Z]/.test(query) || 
+                           /[&\-',.]/.test(query) || 
+                           query.split(' ').length > 1;
+      
+      console.log(`🔍 Query '${query}' interpreted as: ${isCompanyName ? 'Company Name' : 'Industry'}`);
+      
+      // Set up search params based on our determination
+      const searchParams = {
+        company: isCompanyName ? query : undefined,
+        industry: !isCompanyName ? query : undefined,
+        location: location
+      };
+      
+      console.log(`🔍 Executing real scraping with params:`, searchParams);
+      
+      // Search across all real data sources
+      const scrapedData = await searchController.searchBusinessData(searchParams);
+      
+      // ONLY return real data - if no results found, return 404 with clear error
+      if (!scrapedData) {
+        console.log(`❌ No real business data found after scraping all sources`);
+        return res.status(404).json({
+          error: "No results found",
+          message: "No real business information could be found after searching multiple authentic sources including Google Maps, Yelp, and industry directories.",
+          query,
+          location,
+          timestamp: new Date().toISOString(),
+          sources_checked: ["Google Maps", "Yelp", "Yellow Pages", "Industry Directories"]
+        });
+      }
+      
+      console.log(`✅ Successfully scraped real business data for: ${scrapedData.name}`);
+      
+      // Return the results in a clean JSON format
+      return res.status(200).json({
+        status: "success",
+        timestamp: new Date().toISOString(),
+        source: scrapedData.scrapeSource,
+        data: {
+          business_name: scrapedData.name,
+          industry: scrapedData.industry,
+          location: scrapedData.location,
+          address: scrapedData.address,
+          phone: scrapedData.phone,
+          website: scrapedData.website,
+          email: scrapedData.email,
+          contacts: scrapedData.contacts.map((contact: any) => ({
+            name: contact.name,
+            position: contact.position,
+            email: contact.email,
+            phone: contact.companyPhone || contact.personalPhone,
+            is_decision_maker: contact.isDecisionMaker
+          }))
+        },
+        metadata: {
+          scrape_source: scrapedData.scrapeSource,
+          scrape_timestamp: scrapedData.scrapeTimestamp,
+          source_count: 1,
+          contact_count: scrapedData.contacts.length,
+          query_params: {
+            query,
+            location
+          }
+        }
+      });
+    } catch (error) {
+      console.error("❌ Error during scraping operation:", error);
+      return res.status(500).json({
+        error: "Server error",
+        message: "An error occurred while attempting to scrape business data.",
+        details: (error as any).message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
 
   const httpServer = createServer(app);
   return httpServer;

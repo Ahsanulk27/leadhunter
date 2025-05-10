@@ -205,7 +205,7 @@ export class SearchController {
           address: topBusiness.formatted_address || topBusiness.vicinity || '',
           phone: topBusiness.phone || '',
           website: topBusiness.website || '',
-          email: null,
+          email: '',
           contacts: [{
             id: 1,
             name: `Contact at ${topBusiness.name}`,

@@ -219,15 +219,39 @@ export class PuppeteerWrapper {
       // Log the navigation start
       console.log(`🔄 Starting navigation to ${url}...`);
       
-      // Navigate to the URL with longer timeout and networkidle0 for complete page load
-      const response = await page.goto(url, {
-        waitUntil: 'networkidle0', // Wait until there are no network connections for at least 500ms
-        timeout: 30000, // Increased timeout to 30 seconds
-        ...options
-      });
-      
-      // Log navigation completion
-      console.log(`✅ Navigation to ${url} complete`);
+      try {
+        // Navigate to the URL with longer timeout and networkidle0 for complete page load
+        const response = await page.goto(url, {
+          waitUntil: 'networkidle0', // Wait until there are no network connections for at least 500ms
+          timeout: 30000, // Increased timeout to 30 seconds
+          ...options
+        });
+        
+        // Check response status code
+        if (response) {
+          const status = response.status();
+          if (status >= 400) {
+            console.error(`❌ Navigation to ${url} failed with status code ${status}`);
+            
+            // Log response headers for debugging
+            console.log('Response headers:', await response.headers());
+            
+            // Get and log response body for error diagnosis
+            const responseBody = await response.text();
+            console.log(`Response body (first 1000 chars): ${responseBody.substring(0, 1000)}`);
+            
+            if (status === 403) {
+              console.error(`🚫 BLOCKED: Access to ${url} is forbidden - likely blocked by the server`);
+            }
+          }
+        }
+        
+        return response;
+      } catch (error) {
+        const navigationError = error as Error;
+        console.error(`❌ Navigation failed: ${navigationError.message}`);
+        return null;
+      }
       
       // Random post-navigation delay to simulate reading the page
       const postDelay = getRandomDelay(2000, 5000);
