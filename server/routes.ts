@@ -292,9 +292,9 @@ async function simulateScraping(companyName: string, industry?: string, location
   // For simulation, we'll generate a larger set of company data with more contacts
   const companyData = generateIndustrySpecificData(industryCategory, companyName, formattedLocation);
   
-  // BULK DATA ENHANCEMENT: Generate a much larger set of contacts (15-30 contacts instead of 3-5)
+  // BULK DATA ENHANCEMENT: Generate a very large set of contacts (250-500 contacts)
   // In production, this would be from multiple data sources aggregated in parallel
-  const contactCount = 15 + Math.floor(Math.random() * 15); // 15-30 contacts
+  const contactCount = 250 + Math.floor(Math.random() * 250); // 250-500 contacts
   const additionalContacts = generateMoreContacts(industryCategory, companyName, contactCount);
   
   // Aggregate, deduplicate, and enrich contact data
@@ -647,7 +647,7 @@ function generateRandomContacts(count: number, companyName: string): any[] {
   return contacts;
 }
 
-function generateRealEstateContacts(count: number, companyName: string): any[] {
+function generateBusinessContacts(count: number, companyName: string): any[] {
   const contacts = [];
   
   // First names
@@ -658,8 +658,8 @@ function generateRealEstateContacts(count: number, companyName: string): any[] {
   const lastNames = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Miller", "Davis", "Garcia", "Wilson", "Martinez",
                      "Anderson", "Taylor", "Thomas", "Harris", "Moore", "Clark", "Lewis", "Young"];
   
-  // Real estate specific positions with different levels of seniority
-  const realEstatePositions = [
+  // Business positions with different levels of seniority
+  const businessPositions = [
     "Broker/Owner", "Managing Broker", "Principal Broker", "Broker of Record", "CEO",
     "VP of Sales", "VP of Property Management", "Director of Acquisitions", "Director of Leasing",
     "Senior Real Estate Agent", "Real Estate Agent", "Realtor", "Commercial Broker",
@@ -694,11 +694,56 @@ function generateRealEstateContacts(count: number, companyName: string): any[] {
     const areaCode = ["415", "212", "512", "312", "206", "617"][Math.floor(Math.random() * 6)];
     const phone = `(${areaCode}) 555-${Math.floor(1000 + Math.random() * 9000)}`;
     
+    // Is this a decision-maker? (based on position being senior)
+    const isDecisionMaker = i === 0 || position.includes("Broker/Owner") || position.includes("Managing") || 
+                           position.includes("CEO") || position.includes("VP") || 
+                           position.includes("Director") || position.includes("Chief");
+    
+    // Generate cell phone for decision makers
+    const cellPhone = isDecisionMaker ? 
+      `(${Math.floor(Math.random() * 800) + 200}) ${Math.floor(Math.random() * 900) + 100}-${Math.floor(1000 + Math.random() * 9000)}` : 
+      null;
+      
+    // Add address for decision makers
+    const homeAddress = isDecisionMaker ?
+      `${Math.floor(Math.random() * 9000) + 1000} ${['Maple', 'Oak', 'Pine', 'Cedar', 'Elm', 'Willow'][Math.floor(Math.random() * 6)]} ${
+        ['St', 'Ave', 'Blvd', 'Dr', 'Ln', 'Way'][Math.floor(Math.random() * 6)]}, ${
+        ['Apt', 'Unit', 'Suite'][Math.floor(Math.random() * 3)]} ${Math.floor(Math.random() * 900) + 100}` :
+      null;
+    
+    // Generate company details
+    const currentCompany = {
+      name: companyName,
+      title: position,
+      yearsAtCompany: Math.floor(Math.random() * 10) + 1
+    };
+    
+    // Previous company details for more context - general business focused
+    const previousCompany = Math.random() > 0.5 ? {
+      name: `${['Alpha', 'Beta', 'Nova', 'Apex', 'Prime', 'Elite'][Math.floor(Math.random() * 6)]} ${
+        ['Solutions', 'Group', 'Ventures', 'Partners', 'International', 'Industries'][Math.floor(Math.random() * 6)]}`,
+      title: position.includes("CEO") || position.includes("VP") ? 
+             position.replace("CEO", "Director").replace("VP", "Manager") : 
+             `${['Senior', 'Lead', 'Associate'][Math.floor(Math.random() * 3)]} ${position}`,
+      years: `${Math.floor(Math.random() * 5) + 1}-${Math.floor(Math.random() * 5) + 5} years`
+    } : null;
+    
     contacts.push({
       name: `${firstName} ${lastName}`,
       position,
       email,
-      phone,
+      companyPhone: phone,
+      personalPhone: cellPhone,
+      homeAddress: homeAddress,
+      isDecisionMaker: isDecisionMaker,
+      influence: isDecisionMaker ? Math.floor(Math.random() * 30) + 70 : Math.floor(Math.random() * 50) + 20,
+      budget: isDecisionMaker ? `$${(Math.floor(Math.random() * 900) + 100)}K - $${(Math.floor(Math.random() * 900) + 1000)}K` : "Unknown",
+      currentCompany: currentCompany,
+      previousCompany: previousCompany,
+      linkedIn: Math.random() > 0.3 ? `linkedin.com/in/${firstName.toLowerCase()}-${lastName.toLowerCase()}-${Math.floor(Math.random() * 999)}` : null,
+      twitter: Math.random() > 0.7 ? `@${firstName.toLowerCase()}${lastName.toLowerCase()[0]}` : null,
+      meetings: isDecisionMaker ? Math.floor(Math.random() * 3) : 0,
+      notes: isDecisionMaker ? `${firstName} is a key decision-maker for cleaning service vendor selection and has procurement authority.` : ""
     });
   }
   

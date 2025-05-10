@@ -45,7 +45,7 @@ export default function SearchForm({ onSearch, isLoading }: SearchFormProps) {
               </Label>
               <Select
                 onValueChange={(value) => setValue("industry", value)}
-                defaultValue="real_estate"
+                defaultValue=""
               >
                 <SelectTrigger id="industry">
                   <SelectValue placeholder="Select Business Niche" />
