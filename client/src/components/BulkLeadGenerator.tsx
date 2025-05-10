@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Download } from 'lucide-react';
 import { SearchX } from 'lucide-react';
-import { saveAs } from 'file-saver';
+// Remove file-saver import as we'll use native browser download
 
 interface Location {
   name: string;
@@ -27,8 +27,9 @@ const BulkLeadGenerator: React.FC = () => {
   const [maxResults, setMaxResults] = useState<number>(25);
   const [onlyDecisionMakers, setOnlyDecisionMakers] = useState(true);
   
-  // State for data loading
+  // State for data loading and exporting
   const [isLoading, setIsLoading] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [locations, setLocations] = useState<Location[]>([]);
   const [industries, setIndustries] = useState<Industry[]>([]);
   const [results, setResults] = useState<any>(null);
@@ -138,8 +139,9 @@ const BulkLeadGenerator: React.FC = () => {
     }
   };
   
-  const exportToCSV = () => {
-    if (!results || !results.businesses) {
+  // Server-side export for mobile compatibility
+  const exportToCSV = async () => {
+    if (!results || !results.businesses || results.businesses.length === 0) {
       toast({
         title: 'No data to export',
         description: 'Please generate leads first before exporting.',
@@ -148,75 +150,76 @@ const BulkLeadGenerator: React.FC = () => {
       return;
     }
     
-    console.log("Starting CSV export process...");
-    
     try {
-      // Create CSV content
-      let csvContent = 'Company Name,Industry,Address,Phone,Website,Contact Name,Contact Position,Contact Email,Contact Phone,Is Decision Maker\n';
-      
-      results.businesses.forEach((business: any) => {
-        const businessRow = [
-          `"${business.name?.replace(/"/g, '""') || ''}"`,
-          `"${business.category?.replace(/"/g, '""') || ''}"`,
-          `"${business.address?.replace(/"/g, '""') || ''}"`,
-          `"${business.phoneNumber?.replace(/"/g, '""') || ''}"`,
-          `"${business.website?.replace(/"/g, '""') || ''}"`,
-        ];
-        
-        if (business.contacts && business.contacts.length > 0) {
-          // Add contact information
-          business.contacts.forEach((contact: any) => {
-            const contactRow = [
-              ...businessRow,
-              `"${contact.name?.replace(/"/g, '""') || ''}"`,
-              `"${contact.position?.replace(/"/g, '""') || ''}"`,
-              `"${contact.email?.replace(/"/g, '""') || ''}"`,
-              `"${contact.phoneNumber?.replace(/"/g, '""') || ''}"`,
-              `"${contact.isDecisionMaker ? 'Yes' : 'No'}"`,
-            ];
-            csvContent += contactRow.join(',') + '\n';
-          });
-        } else {
-          // No contacts, add empty contact fields
-          const emptyContactRow = [...businessRow, '""', '""', '""', '""', '""'];
-          csvContent += emptyContactRow.join(',') + '\n';
-        }
+      // Show a loading toast
+      toast({
+        title: 'Preparing your export...',
+        description: 'We\'re creating your CSV file for download.',
+        variant: 'default'
       });
       
-      console.log("CSV content prepared, creating download...");
+      setIsExporting(true);
       
-      // Create a Blob and download the file
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+      // Send data to server for CSV generation
+      const response = await fetch('/api/bulk-leads/export-csv', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          searchTerm,
+          locations: selectedLocations,
+          businesses: results.businesses
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+      }
+
+      // For iPhone/mobile compatibility, we'll download the file directly
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      
+      // The filename will be set by the server's Content-Disposition header
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const filename = `leads_${searchTerm.replace(/\s+/g, '_')}_${timestamp}.csv`;
+      const sanitizedSearchTerm = (searchTerm || 'leads').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const filename = `nexlead_${sanitizedSearchTerm}_${timestamp}.csv`;
       
-      // Create an anchor element and trigger download
-      const downloadLink = document.createElement('a');
-      downloadLink.href = URL.createObjectURL(blob);
-      downloadLink.download = filename;
-      document.body.appendChild(downloadLink); // Required for Firefox
+      // Create a hidden download link and trigger it
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = downloadUrl;
+      a.download = filename; // This is a fallback, the server's header takes precedence
       
-      // Explicitly click the download link
-      downloadLink.click();
+      // Add to DOM, click it, and clean up
+      document.body.appendChild(a);
+      a.click();
+      
+      // Try to use a modern approach for iPhone/Safari
+      if (navigator.userAgent.match(/(iPhone|iPad|iPod|Safari)/i)) {
+        window.location.href = downloadUrl;
+      }
       
       // Clean up
       setTimeout(() => {
-        document.body.removeChild(downloadLink);
-        URL.revokeObjectURL(downloadLink.href);
+        window.URL.revokeObjectURL(downloadUrl);
+        document.body.removeChild(a);
+        setIsExporting(false);
+        
+        toast({
+          title: 'Export complete!',
+          description: `${results.totalBusinesses} leads have been exported to CSV`,
+          variant: 'default'
+        });
       }, 100);
-      
-      console.log("Download triggered for file:", filename);
-      
-      toast({
-        title: 'Export complete',
-        description: 'Your leads have been exported to CSV. Check your downloads folder.',
-        variant: 'default'
-      });
     } catch (error) {
-      console.error("Error during CSV export:", error);
+      console.error('Error exporting CSV:', error);
+      setIsExporting(false);
+      
       toast({
         title: 'Export failed',
-        description: 'There was an error exporting your data. Please try again.',
+        description: 'There was a problem creating your export file. Please try again.',
         variant: 'destructive'
       });
     }
@@ -308,9 +311,18 @@ const BulkLeadGenerator: React.FC = () => {
           </Button>
           
           {results && (
-            <Button onClick={exportToCSV} variant="outline">
-              <Download className="mr-2 h-4 w-4" />
-              Export to CSV
+            <Button onClick={exportToCSV} variant="outline" disabled={isExporting}>
+              {isExporting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <Download className="mr-2 h-4 w-4" />
+                  Export to CSV
+                </>
+              )}
             </Button>
           )}
         </CardFooter>

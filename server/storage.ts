@@ -1,10 +1,17 @@
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 import { 
-  users, type User, type InsertUser,
-  companies, type Company, type InsertCompany,
-  contacts, type Contact, type InsertContact,
-  searchHistory, type SearchHistory, type InsertSearchHistory
+  users, companies, contacts, searchHistory, bulkLeadSearches,
+  type User, type InsertUser, 
+  type Company, type InsertCompany,
+  type Contact, type InsertContact,
+  type SearchHistory, type InsertSearchHistory,
+  type BulkLeadSearch, type InsertBulkLeadSearch 
 } from "@shared/schema";
 
+/**
+ * Data storage interface for NexLead
+ */
 export interface IStorage {
   // User methods
   getUser(id: number): Promise<User | undefined>;
@@ -27,127 +34,139 @@ export interface IStorage {
   // Search history methods
   getSearchHistory(): Promise<SearchHistory[]>;
   createSearchHistory(searchHistory: InsertSearchHistory): Promise<SearchHistory>;
+  
+  // Bulk lead search methods
+  saveBulkLeadSearch(searchData: InsertBulkLeadSearch): Promise<BulkLeadSearch>;
+  getBulkLeadSearches(): Promise<BulkLeadSearch[]>;
+  getBulkLeadSearch(id: number): Promise<BulkLeadSearch | undefined>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private companies: Map<number, Company>;
-  private contacts: Map<number, Contact>;
-  private searchHistories: Map<number, SearchHistory>;
-  
-  private userId: number;
-  private companyId: number;
-  private contactId: number;
-  private searchHistoryId: number;
-
-  constructor() {
-    this.users = new Map();
-    this.companies = new Map();
-    this.contacts = new Map();
-    this.searchHistories = new Map();
-    
-    this.userId = 1;
-    this.companyId = 1;
-    this.contactId = 1;
-    this.searchHistoryId = 1;
-    
-    // Initialize with sample data
-    this.initializeData();
-  }
-
-  private initializeData() {
-    // Add any initial data if needed
-  }
-
-  // User methods
+/**
+ * Database implementation of storage using Drizzle ORM
+ */
+export class DatabaseStorage implements IStorage {
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user || undefined;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.userId++;
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
+    const [user] = await db
+      .insert(users)
+      .values(insertUser)
+      .returning();
     return user;
   }
   
-  // Company methods
   async getCompany(id: number): Promise<Company | undefined> {
-    return this.companies.get(id);
+    const [company] = await db.select().from(companies).where(eq(companies.id, id));
+    return company || undefined;
   }
-
+  
   async getCompanyByName(name: string): Promise<Company | undefined> {
-    return Array.from(this.companies.values()).find(
-      (company) => company.name.toLowerCase() === name.toLowerCase(),
-    );
+    const [company] = await db.select().from(companies).where(eq(companies.name, name));
+    return company || undefined;
   }
-
+  
   async getCompanies(): Promise<Company[]> {
-    return Array.from(this.companies.values());
+    return await db.select().from(companies);
   }
-
+  
   async createCompany(insertCompany: InsertCompany): Promise<Company> {
-    const id = this.companyId++;
-    const searchDate = new Date();
-    const company: Company = { ...insertCompany, id, searchDate };
-    this.companies.set(id, company);
+    const [company] = await db
+      .insert(companies)
+      .values(insertCompany)
+      .returning();
     return company;
   }
   
-  // Contact methods
   async getContact(id: number): Promise<Contact | undefined> {
-    return this.contacts.get(id);
+    const [contact] = await db.select().from(contacts).where(eq(contacts.id, id));
+    return contact || undefined;
   }
-
+  
   async getContactsByCompanyId(companyId: number): Promise<Contact[]> {
-    return Array.from(this.contacts.values()).filter(
-      (contact) => contact.companyId === companyId,
-    );
+    return await db
+      .select()
+      .from(contacts)
+      .where(eq(contacts.companyId, companyId));
   }
-
+  
   async getSavedContacts(): Promise<Contact[]> {
-    return Array.from(this.contacts.values()).filter(
-      (contact) => contact.saved === true,
+    // Get contacts from companies that are saved
+    const savedCompanies = await db
+      .select()
+      .from(companies)
+      .where(eq(companies.isSaved, true));
+    
+    const savedContactsPromises = savedCompanies.map(company => 
+      this.getContactsByCompanyId(company.id)
     );
+    
+    const savedContactsArrays = await Promise.all(savedContactsPromises);
+    return savedContactsArrays.flat();
   }
-
+  
   async createContact(insertContact: InsertContact): Promise<Contact> {
-    const id = this.contactId++;
-    const searchDate = new Date();
-    const contact: Contact = { ...insertContact, id, searchDate, lastContactDate: null };
-    this.contacts.set(id, contact);
+    const [contact] = await db
+      .insert(contacts)
+      .values(insertContact)
+      .returning();
     return contact;
   }
-
+  
   async updateContact(id: number, contactUpdate: Partial<Contact>): Promise<Contact | undefined> {
-    const existingContact = this.contacts.get(id);
-    if (!existingContact) {
-      return undefined;
-    }
-
-    const updatedContact = { ...existingContact, ...contactUpdate };
-    this.contacts.set(id, updatedContact);
+    const [updatedContact] = await db
+      .update(contacts)
+      .set(contactUpdate)
+      .where(eq(contacts.id, id))
+      .returning();
     return updatedContact;
   }
   
-  // Search history methods
   async getSearchHistory(): Promise<SearchHistory[]> {
-    return Array.from(this.searchHistories.values());
+    return await db
+      .select()
+      .from(searchHistory)
+      .orderBy(searchHistory.searchDate);
   }
-
+  
   async createSearchHistory(insertSearchHistory: InsertSearchHistory): Promise<SearchHistory> {
-    const id = this.searchHistoryId++;
-    const searchDate = new Date();
-    const searchHistoryEntry: SearchHistory = { ...insertSearchHistory, id, searchDate };
-    this.searchHistories.set(id, searchHistoryEntry);
+    const [searchHistoryEntry] = await db
+      .insert(searchHistory)
+      .values(insertSearchHistory)
+      .returning();
     return searchHistoryEntry;
+  }
+  
+  async saveBulkLeadSearch(searchData: InsertBulkLeadSearch): Promise<BulkLeadSearch> {
+    const [bulkSearch] = await db
+      .insert(bulkLeadSearches)
+      .values(searchData)
+      .returning();
+    return bulkSearch;
+  }
+  
+  async getBulkLeadSearches(): Promise<BulkLeadSearch[]> {
+    return await db
+      .select()
+      .from(bulkLeadSearches)
+      .orderBy(bulkLeadSearches.searchDate);
+  }
+  
+  async getBulkLeadSearch(id: number): Promise<BulkLeadSearch | undefined> {
+    const [bulkSearch] = await db
+      .select()
+      .from(bulkLeadSearches)
+      .where(eq(bulkLeadSearches.id, id));
+    return bulkSearch || undefined;
   }
 }
 
-export const storage = new MemStorage();
+// Export the database storage instance
+export const storage = new DatabaseStorage();
