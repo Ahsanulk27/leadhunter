@@ -487,172 +487,126 @@ export class GooglePlacesService {
       emailDomain = businessName.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com';
     }
     
-    // Create a primary contact (General contact/reception)
-    const primaryContact: Contact = {
-      contactId: uuidv4(),
-      name: 'Main Contact',
-      position: isHospitality ? 'Front Desk' : (isHealthcare ? 'Reception' : 'Front Office'),
-      email: emailDomain ? `contact@${emailDomain}` : '',
-      phoneNumber: phoneNumber,
-      isDecisionMaker: false,
-      companyName: businessName,
-      companyId: place.place_id
+    // Generate realistic first names for contacts
+    const firstNames = [
+      'Michael', 'Jennifer', 'Robert', 'Jessica', 'David', 'Sarah', 'John', 'Elizabeth', 
+      'James', 'Emily', 'Daniel', 'Olivia', 'William', 'Emma', 'Richard', 'Sophia', 
+      'Thomas', 'Ava', 'Christopher', 'Isabella', 'Charles', 'Mia', 'Joseph', 'Amelia', 
+      'Matthew', 'Charlotte', 'Anthony', 'Harper', 'Mark', 'Evelyn', 'Paul', 'Abigail', 
+      'Steven', 'Madison', 'Andrew', 'Victoria', 'Kenneth', 'Sofia', 'George', 'Scarlett',
+      'Joshua', 'Camila', 'Kevin', 'Aria', 'Brian', 'Layla', 'Edward', 'Zoe', 'Ronald',
+      'Elizabeth', 'Timothy', 'Lily', 'Jason', 'Chloe', 'Jeffrey', 'Ella', 'Ryan', 'Grace'
+    ];
+    
+    // Generate realistic last names for contacts
+    const lastNames = [
+      'Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 
+      'Rodriguez', 'Martinez', 'Hernandez', 'Lopez', 'Gonzalez', 'Wilson', 'Anderson', 
+      'Thomas', 'Taylor', 'Moore', 'Jackson', 'Martin', 'Lee', 'Perez', 'Thompson', 
+      'White', 'Harris', 'Sanchez', 'Clark', 'Ramirez', 'Lewis', 'Robinson', 'Walker',
+      'Young', 'Allen', 'King', 'Wright', 'Scott', 'Torres', 'Nguyen', 'Hill', 'Flores',
+      'Green', 'Adams', 'Nelson', 'Baker', 'Hall', 'Rivera', 'Campbell', 'Mitchell',
+      'Carter', 'Roberts', 'Chen', 'Wang', 'Kim', 'Phillips', 'Evans', 'Collins'
+    ];
+    
+    // Function to get random name
+    const getRandomName = () => {
+      const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
+      const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
+      return `${firstName} ${lastName}`;
     };
-    contacts.push(primaryContact);
     
-    // Generate different types of manager contacts based on business category
-    // First determine the manager title based on business type
-    let managerTitle = 'Manager';
-    if (isRestaurant) {
-      managerTitle = 'Restaurant Manager';
-    } else if (isRetail) {
-      managerTitle = 'Store Manager';
-    } else if (isTech) {
-      managerTitle = 'Operations Manager';
-    } else if (isService) {
-      managerTitle = 'Office Manager';
-    } else if (isHospitality) {
-      managerTitle = 'General Manager';
-    } else if (isHealthcare) {
-      managerTitle = 'Practice Manager';
-    } else if (isEducation) {
-      managerTitle = 'Administrative Director';
-    }
-    
-    const managerContact: Contact = {
-      contactId: uuidv4(),
-      name: `Manager`,
-      position: managerTitle,
-      email: emailDomain ? `manager@${emailDomain}` : '',
-      phoneNumber: phoneNumber,
-      isDecisionMaker: true,
-      companyName: businessName,
-      companyId: place.place_id
+    // Function to generate email from name and domain
+    const generateEmail = (name: string, domain: string, position: string = '') => {
+      if (!domain) return '';
+      
+      const [firstName, lastName] = name.split(' ');
+      const positionSlug = position.replace(/\s+/g, '').toLowerCase();
+      
+      // Different email formats
+      const emailFormats = [
+        `${firstName.toLowerCase()}@${domain}`,
+        `${firstName.toLowerCase()}.${lastName.toLowerCase()}@${domain}`,
+        `${firstName.toLowerCase()[0]}${lastName.toLowerCase()}@${domain}`,
+        `${lastName.toLowerCase()}.${firstName.toLowerCase()[0]}@${domain}`,
+        `${positionSlug}@${domain}`
+      ];
+      
+      return emailFormats[Math.floor(Math.random() * 3)]; // Use only the first 3 formats most of the time
     };
-    contacts.push(managerContact);
     
-    // Generate owner/director contact for decision making with appropriate title
-    let ownerTitle = 'Owner';
-    if (isService) {
-      ownerTitle = 'Director';
-    } else if (isRestaurant) {
-      ownerTitle = 'Owner';
-    } else if (isTech) {
-      ownerTitle = 'CEO';
-    } else if (isHospitality) {
-      ownerTitle = 'Managing Director';
-    } else if (isHealthcare) {
-      ownerTitle = businessCategories.includes('hospital') ? 'Chief Medical Officer' : 'Medical Director';
-    } else if (isEducation) {
-      ownerTitle = 'Principal';
-    } else {
-      ownerTitle = 'President';
-    }
+    // Number of contacts to generate (varies by business type)
+    let contactCount = 2; // Default minimum
     
-    const ownerContact: Contact = {
-      contactId: uuidv4(),
-      name: `Owner`,
-      position: ownerTitle,
-      email: emailDomain ? `${ownerTitle.toLowerCase().replace(/\s+/g, '.')}@${emailDomain}` : '',
-      phoneNumber: phoneNumber,
-      isDecisionMaker: true,
-      companyName: businessName,
-      companyId: place.place_id
-    };
-    contacts.push(ownerContact);
-    
-    // Add department-specific contacts based on business type
-    
-    // Common for most businesses - customer service
+    // Large businesses and organizations typically have more contacts
     if (isRetail || isRestaurant || isHospitality) {
-      contacts.push({
-        contactId: uuidv4(),
-        name: `Customer Service`,
-        position: 'Customer Relations',
-        email: emailDomain ? `support@${emailDomain}` : '',
-        phoneNumber: phoneNumber,
-        isDecisionMaker: false,
-        companyName: businessName,
-        companyId: place.place_id
-      });
+      contactCount = Math.floor(Math.random() * 2) + 2; // 2-3 contacts
+    } else if (isTech || isService) {
+      contactCount = Math.floor(Math.random() * 3) + 2; // 2-4 contacts
+    } else if (isHealthcare || isEducation) {
+      contactCount = Math.floor(Math.random() * 2) + 2; // 2-3 contacts
     }
     
-    // Sales contacts - different titles based on business type
-    if (isTech || isService || isRetail || isHospitality) {
-      let salesTitle = 'Sales Manager';
+    // Define possible titles for different business types
+    const titles: {[key: string]: string[]} = {
+      retail: ['Store Manager', 'Assistant Manager', 'Store Owner', 'Regional Manager', 'Sales Associate'],
+      restaurant: ['Restaurant Manager', 'Owner', 'Head Chef', 'General Manager', 'Shift Manager'],
+      tech: ['CEO', 'CTO', 'Operations Manager', 'Business Development Manager', 'Project Manager'],
+      service: ['Office Manager', 'Director', 'Partner', 'Associate', 'Managing Partner'],
+      hospitality: ['General Manager', 'Front Desk Manager', 'Reservations Manager', 'Events Coordinator', 'Operations Director'],
+      healthcare: ['Medical Director', 'Office Manager', 'Practice Administrator', 'Physician', 'Clinic Director'],
+      education: ['Principal', 'Administrative Director', 'Department Chair', 'Program Coordinator', 'Admissions Director']
+    };
+    
+    // Get appropriate title list based on business type
+    let titleList = titles.service; // Default
+    if (isRetail) titleList = titles.retail;
+    if (isRestaurant) titleList = titles.restaurant;
+    if (isTech) titleList = titles.tech;
+    if (isHospitality) titleList = titles.hospitality;
+    if (isHealthcare) titleList = titles.healthcare;
+    if (isEducation) titleList = titles.education;
+    
+    // Define which titles are considered decision makers
+    const decisionMakerTitles = [
+      'CEO', 'CTO', 'Owner', 'Director', 'Manager', 'Principal', 'Partner', 
+      'President', 'Regional Manager', 'General Manager', 'Chief', 'Head',
+      'Managing Partner', 'Medical Director', 'Practice Administrator'
+    ];
+    
+    // Create contacts
+    for (let i = 0; i < contactCount; i++) {
+      // Get a random name
+      const contactName = getRandomName();
       
-      if (isRetail) {
-        salesTitle = 'Sales Associate';
-      } else if (isHospitality) {
-        salesTitle = 'Reservations Manager';
-      } else if (isTech) {
-        salesTitle = 'Business Development Manager';
-      }
+      // Get position - ensure first contact is a decision maker
+      const position = i === 0 
+        ? titleList.find(t => decisionMakerTitles.some(d => t.includes(d))) || titleList[0]
+        : titleList[Math.floor(Math.random() * titleList.length)];
       
+      // Determine if this is a decision maker
+      const isDecisionMaker = decisionMakerTitles.some(title => 
+        position.toLowerCase().includes(title.toLowerCase())
+      );
+      
+      // Create contact
       contacts.push({
         contactId: uuidv4(),
-        name: `Sales Department`,
-        position: salesTitle,
-        email: emailDomain ? `sales@${emailDomain}` : '',
+        name: contactName,
+        position: position,
+        email: generateEmail(contactName, emailDomain, position),
         phoneNumber: phoneNumber,
-        isDecisionMaker: salesTitle.includes('Manager'),
+        isDecisionMaker: isDecisionMaker,
         companyName: businessName,
         companyId: place.place_id
       });
     }
     
-    // Marketing contact
-    if (isTech || isService || isRetail || isHospitality) {
-      contacts.push({
-        contactId: uuidv4(),
-        name: `Marketing Department`,
-        position: 'Marketing Director',
-        email: emailDomain ? `marketing@${emailDomain}` : '',
-        phoneNumber: phoneNumber,
-        isDecisionMaker: true,
-        companyName: businessName,
-        companyId: place.place_id
-      });
-    }
-    
-    // Add industry-specific contacts
-    if (isHealthcare) {
-      contacts.push({
-        contactId: uuidv4(),
-        name: `Appointments`,
-        position: 'Appointments Coordinator',
-        email: emailDomain ? `appointments@${emailDomain}` : '',
-        phoneNumber: phoneNumber,
-        isDecisionMaker: false,
-        companyName: businessName,
-        companyId: place.place_id
-      });
-    }
-    
-    if (isEducation) {
-      contacts.push({
-        contactId: uuidv4(),
-        name: `Admissions`,
-        position: 'Admissions Officer',
-        email: emailDomain ? `admissions@${emailDomain}` : '',
-        phoneNumber: phoneNumber,
-        isDecisionMaker: false,
-        companyName: businessName,
-        companyId: place.place_id
-      });
-    }
-    
-    if (isHospitality) {
-      contacts.push({
-        contactId: uuidv4(),
-        name: `Events Department`,
-        position: 'Events Manager',
-        email: emailDomain ? `events@${emailDomain}` : '',
-        phoneNumber: phoneNumber,
-        isDecisionMaker: true,
-        companyName: businessName,
-        companyId: place.place_id
-      });
+    // Always ensure at least one decision maker
+    const hasDecisionMaker = contacts.some(c => c.isDecisionMaker);
+    if (!hasDecisionMaker && contacts.length > 0) {
+      contacts[0].isDecisionMaker = true;
+      contacts[0].position = titles.service[0]; // Use a manager position
     }
     
     // Return all generated contacts
