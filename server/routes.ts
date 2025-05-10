@@ -5,7 +5,8 @@ import * as cheerio from "cheerio";
 import axios from "axios";
 import { 
   insertCompanySchema, insertContactSchema, insertSearchHistorySchema,
-  type InsertCompany, type InsertContact, type InsertSearchHistory 
+  type InsertCompany, type InsertContact, type InsertSearchHistory,
+  type Contact
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -270,17 +271,29 @@ async function simulateScraping(companyName: string, industry?: string, location
   // For now, simulate response delay
   await new Promise(resolve => setTimeout(resolve, 1500));
   
-  // Generate simulated data based on search parameters
-  const companyData = {
-    name: companyName,
-    industry: industry || generateRandomIndustry(),
-    location: location || generateRandomLocation(),
-    size: generateRandomSize(),
-    address: generateRandomAddress(location),
-    contacts: generateRandomContacts(3, companyName),
-  };
+  // Check if this is a real estate related search
+  const isRealEstate = industry?.toLowerCase() === 'real_estate' ||
+                       companyName.toLowerCase().includes('realty') ||
+                       companyName.toLowerCase().includes('property') ||
+                       companyName.toLowerCase().includes('real estate') ||
+                       companyName.toLowerCase().includes('properties') ||
+                       companyName.toLowerCase().includes('home') ||
+                       companyName.toLowerCase().includes('estate');
   
-  return companyData;
+  // Generate data based on whether it's a real estate company or not
+  if (isRealEstate) {
+    return generateRealEstateCompanyData(companyName, location);
+  } else {
+    // Standard company data
+    return {
+      name: companyName,
+      industry: industry || generateRandomIndustry(),
+      location: location || generateRandomLocation(),
+      size: generateRandomSize(),
+      address: generateRandomAddress(location),
+      contacts: generateRandomContacts(3, companyName),
+    };
+  }
 }
 
 // Helper functions to generate realistic dummy data for the simulation
