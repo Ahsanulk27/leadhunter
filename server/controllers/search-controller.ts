@@ -7,18 +7,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import { BusinessData, SearchParams, ScrapingResult } from '../models/business-data';
 
-// Import placeholder for the cheerio scraper module
-// This would be your actual scraper implementation
-const cheerioScraper = {
-  multiSourceSearch: async (query: string, location?: string) => {
-    // This is a placeholder - in a real implementation, this would scrape multiple sources
-    // and return combined business data
-    console.log(`🔍 CheerioScraper: Starting multi-source search for '${query}' in ${location || 'any location'}`);
-    
-    // Return empty results (in development we'll use sample data)
-    return { businesses: [], sources: [] };
-  }
-};
+// Import the Google Places API service
+import { googlePlacesService } from '../api/google-places-service';
 
 interface SearchControllerOptions {
   maxRetries?: number;
@@ -120,7 +110,7 @@ export class SearchController {
   }
 
   /**
-   * Execute search across all sources
+   * Execute search using Google Places API
    */
   private async executeSearch(
     params: SearchParams,
@@ -134,53 +124,23 @@ export class SearchController {
     const location = params.location;
     
     try {
-      // Execute search across multiple sources
-      const { businesses, sources } = await cheerioScraper.multiSourceSearch(query, location);
+      // Execute search using Google Places API
+      console.log(`🔍 SearchController: Searching using Google Places API for "${query}" in ${location || 'any location'}`);
+      const { businesses, sources } = await googlePlacesService.searchBusinesses(query, location);
       
       if (businesses.length > 0) {
-        console.log(`✅ SearchController: Found ${businesses.length} businesses from ${sources.length} sources`);
+        console.log(`✅ SearchController: Found ${businesses.length} businesses from Google Places API`);
         return { businesses, sources };
       }
       
-      console.log(`❌ SearchController: No businesses found from any source`);
+      console.log(`❌ SearchController: No businesses found from Google Places API`);
       
-      // If in development mode, use sample data when scraping fails
-      // This is helpful for development and testing when we encounter CAPTCHAs
-      if (process.env.NODE_ENV === 'development' || retryCount > 0) {
-        console.log(`🔄 SearchController: Using sample data for development (CAPTCHA/anti-bot measures detected)`);
-        
-        // Import dynamically to avoid circular dependencies
-        const { getSampleBusinessData } = await import('../api/industry-sample-data');
-        
-        // Get sample data based on query and location
-        const sampleBusinesses = getSampleBusinessData(query, location, 10);
-        
-        return {
-          businesses: sampleBusinesses,
-          sources: ['sample-data']
-        };
-      }
-      
+      // Return empty result if no businesses found - no fallback to sample data
       return { businesses: [], sources: [] };
     } catch (error) {
       console.error(`❌ SearchController error during execution:`, error);
       
-      // If in development mode, use sample data when scraping fails
-      if (process.env.NODE_ENV === 'development' || retryCount > 0) {
-        console.log(`🔄 SearchController: Using sample data for development after error`);
-        
-        // Import dynamically to avoid circular dependencies
-        const { getSampleBusinessData } = await import('../api/industry-sample-data');
-        
-        // Get sample data based on query and location
-        const sampleBusinesses = getSampleBusinessData(query, location, 10);
-        
-        return {
-          businesses: sampleBusinesses,
-          sources: ['sample-data']
-        };
-      }
-      
+      // Return empty result on error
       return { businesses: [], sources: [] };
     }
   }

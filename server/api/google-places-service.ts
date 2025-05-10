@@ -1,367 +1,172 @@
-import axios from 'axios';
-import * as puppeteer from 'puppeteer';
-
 /**
- * Service for fetching real business data from Google Places API
- * This service only accesses publicly available information that businesses 
- * have explicitly shared on Google.
+ * Google Places API service for the NexLead application
+ * Uses the Google Places API to search for businesses
  */
+
+import axios from 'axios';
+import { v4 as uuidv4 } from 'uuid';
+import { BusinessData, Contact } from '../models/business-data';
+
+interface PlacesSearchResult {
+  results: any[];
+  status: string;
+  next_page_token?: string;
+}
+
+interface PlaceDetailsResult {
+  result: any;
+  status: string;
+}
+
 export class GooglePlacesService {
   private apiKey: string;
   
   constructor() {
-    // In a real implementation, this would come from environment variables
-    this.apiKey = process.env.GOOGLE_PLACES_API_KEY || '';
-  }
-  
-  /**
-   * Search for businesses by industry/category and location
-   * Only returns publicly available information
-   */
-  async searchBusinesses(params: {
-    industry?: string;
-    location?: string;
-    companyName?: string;
-  }) {
-    try {
-      // Build search query
-      let query = '';
-      
-      if (params.companyName) {
-        query = params.companyName;
-      } else if (params.industry && params.location) {
-        query = `${params.industry} businesses in ${params.location}`;
-      } else if (params.industry) {
-        query = `${params.industry} businesses`;
-      } else if (params.location) {
-        query = `businesses in ${params.location}`;
-      } else {
-        query = 'top businesses';
-      }
-      
-      console.log(`Would search Google Places for: "${query}"`);
-      
-      // Try to use the Places API if we have an API key
-      if (this.apiKey) {
-        try {
-          const response = await axios.get(
-            'https://maps.googleapis.com/maps/api/place/textsearch/json',
-            {
-              params: {
-                query,
-                key: this.apiKey
-              }
-            }
-          );
-          
-          if (response.data && response.data.results && response.data.results.length > 0) {
-            console.log(`Found ${response.data.results.length} businesses via Google Places API`);
-            return response.data.results;
-          }
-        } catch (apiError) {
-          console.error('Error calling Google Places API:', apiError);
-        }
-      }
-      
-      // If we don't have an API key or the API call failed, use web scraping
-      // Use puppeteer to scrape Google Maps
-      try {
-        console.log('Attempting to scrape Google Maps for business data...');
-        // Launch puppeteer browser
-        const browser = await puppeteer.launch({
-          args: ['--no-sandbox', '--disable-setuid-sandbox']
-        });
-        
-        try {
-          const page = await browser.newPage();
-          
-          // Set a desktop user agent
-          await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
-          
-          // Navigate to Google Maps with the search query
-          await page.goto(`https://www.google.com/maps/search/${encodeURIComponent(query)}`, { waitUntil: 'networkidle2', timeout: 15000 });
-          
-          // Wait for results to load
-          await page.waitForTimeout(3000);
-          
-          // Extract business data
-          const businessResults = await page.evaluate(() => {
-            const results = [];
-            
-            // Look for business listings
-            const listings = document.querySelectorAll('div[role="feed"] > div, .section-result');
-            
-            listings.forEach((listing, index) => {
-              try {
-                // Get name
-                const nameEl = listing.querySelector('h3, .section-result-title');
-                let name = nameEl ? nameEl.textContent.trim() : '';
-                
-                // Get address/vicinity
-                const addressEl = listing.querySelector('.section-result-location, div:not([class*="rating"]):not([class*="price"]):not([class*="section-result-title"])');
-                let vicinity = addressEl ? addressEl.textContent.trim() : '';
-                
-                // Create a place_id
-                const place_id = `scr-${Date.now()}-${index}`;
-                
-                // Get types if available
-                const typeEl = listing.querySelector('.section-result-details, div:not(:first-child)');
-                const types = typeEl ? [typeEl.textContent.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')] : ['business'];
-                
-                // Check if we have a valid business entry
-                if (name) {
-                  results.push({
-                    place_id,
-                    name,
-                    formatted_address: vicinity,
-                    vicinity,
-                    business_status: 'OPERATIONAL',
-                    types
-                  });
-                }
-              } catch (e) {
-                console.log('Error parsing listing:', e);
-              }
-            });
-            
-            return results;
-          });
-          
-          // Close the browser
-          await browser.close();
-          
-          if (businessResults && businessResults.length > 0) {
-            console.log(`Found ${businessResults.length} businesses via web scraping`);
-            return businessResults;
-          }
-          
-          // If we didn't find any results, try a different approach
-          return await this.scrapeBingLocal(query);
-        } catch (pageError) {
-          console.error('Error during Google Maps scraping:', pageError);
-          await browser.close();
-          
-          // Try an alternative source
-          return await this.scrapeBingLocal(query);
-        }
-      } catch (puppeteerError) {
-        console.error('Error launching puppeteer:', puppeteerError);
-        
-        // Fallback to a different source
-        return await this.scrapeBingLocal(query);
-      }
-    } catch (error) {
-      console.error('Error searching businesses:', error);
-      return [];
+    this.apiKey = process.env.GOOGLE_API_KEY || '';
+    
+    if (!this.apiKey) {
+      console.error('⚠️ GooglePlacesService: No API key provided');
     }
   }
   
   /**
-   * Scrape Bing Local for business listings as an alternative source
+   * Search for businesses using Google Places API
    */
-  private async scrapeBingLocal(query: string) {
+  async searchBusinesses(query: string, location?: string): Promise<{
+    businesses: BusinessData[];
+    sources: string[];
+  }> {
+    console.log(`🔍 GooglePlacesService: Searching for '${query}' in ${location || 'any location'}`);
+    
+    if (!this.apiKey) {
+      console.error('❌ GooglePlacesService: No API key available');
+      return { businesses: [], sources: [] };
+    }
+    
     try {
-      console.log('Attempting to scrape Bing Local for business data...');
+      // Construct the query with location if provided
+      let searchQuery = query;
+      if (location) {
+        searchQuery = `${query} in ${location}`;
+      }
       
-      // Use axios to scrape Bing Local search
-      const response = await axios.get(`https://www.bing.com/maps?q=${encodeURIComponent(query)}`, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      // Call the Places API Text Search endpoint
+      const textSearchUrl = 'https://maps.googleapis.com/maps/api/place/textsearch/json';
+      const response = await axios.get(textSearchUrl, {
+        params: {
+          query: searchQuery,
+          key: this.apiKey
         }
       });
       
-      // Create a regex pattern to extract business data from the script tags
-      const scriptPattern = /<script[^>]*>(\s*window\.INITIAL_DATA\s*=\s*)(.*?)(\s*;\s*<\/script>)/i;
-      const match = response.data.match(scriptPattern);
+      const data: PlacesSearchResult = response.data;
       
-      if (match && match[2]) {
+      if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
+        console.error(`❌ GooglePlacesService: API error: ${data.status}`);
+        return { businesses: [], sources: [] };
+      }
+      
+      if (data.results.length === 0) {
+        console.log('❌ GooglePlacesService: No results found');
+        return { businesses: [], sources: [] };
+      }
+      
+      console.log(`✅ GooglePlacesService: Found ${data.results.length} places`);
+      
+      // Process the results
+      const businesses: BusinessData[] = [];
+      
+      for (const place of data.results) {
         try {
-          // Try to parse the JSON data
-          const jsonData = JSON.parse(match[2]);
-          const businesses = [];
+          // Get the place details to get more information
+          const details = await this.getPlaceDetails(place.place_id);
           
-          // Extract business listings from the JSON
-          if (jsonData && jsonData.entities && jsonData.entities.results) {
-            const listings = jsonData.entities.results;
-            
-            listings.forEach((listing: any, index: number) => {
-              try {
-                if (listing.name) {
-                  businesses.push({
-                    place_id: `bing-${Date.now()}-${index}`,
-                    name: listing.name,
-                    formatted_address: listing.address || '',
-                    vicinity: listing.address || '',
-                    business_status: 'OPERATIONAL',
-                    types: [listing.category || 'business'],
-                    website: listing.website || ''
-                  });
-                }
-              } catch (e) {
-                // Skip this listing
-              }
-            });
-          }
+          // Create the business data
+          const business: BusinessData = {
+            id: uuidv4(),
+            name: place.name,
+            address: place.formatted_address || '',
+            phoneNumber: details.formatted_phone_number || '',
+            website: details.website || '',
+            description: place.editorial_summary?.overview || '',
+            category: place.types?.join(', ') || '',
+            rating: place.rating,
+            reviewCount: place.user_ratings_total,
+            imageUrl: place.photos?.[0]?.photo_reference 
+              ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${place.photos[0].photo_reference}&key=${this.apiKey}`
+              : undefined,
+            source: 'google-places-api',
+            sourceUrl: `https://www.google.com/maps/place/?q=place_id:${place.place_id}`,
+            scrapedDate: new Date(),
+            contacts: this.generateContactsFromPlace(place, details)
+          };
           
-          console.log(`Found ${businesses.length} businesses via Bing Local`);
-          return businesses;
-        } catch (jsonError) {
-          console.error('Error parsing Bing data:', jsonError);
+          businesses.push(business);
+        } catch (error) {
+          console.error(`❌ GooglePlacesService: Error processing place:`, error);
         }
       }
       
-      // Fallback to a simple extraction
-      return this.scrapeYellowPages(query);
+      return { 
+        businesses, 
+        sources: ['google-places-api'] 
+      };
     } catch (error) {
-      console.error('Error scraping Bing Local:', error);
-      return this.scrapeYellowPages(query);
+      console.error(`❌ GooglePlacesService error:`, error);
+      return { businesses: [], sources: [] };
     }
   }
   
   /**
-   * Scrape YellowPages for business listings as a last resort
-   * This is public to allow direct access from the search controller
+   * Get detailed information about a place
    */
-  async scrapeYellowPages(query: string) {
+  private async getPlaceDetails(placeId: string): Promise<any> {
     try {
-      console.log('Attempting to scrape YellowPages for business data...');
-      
-      // Extract search terms from query
-      const terms = query.split(' ');
-      let what = terms[0]; // Assume first term is the search term
-      let where = 'US';
-      
-      // Look for location keywords
-      for (const term of terms) {
-        if (term.toLowerCase() === 'in') {
-          const locationIndex = terms.indexOf(term);
-          if (locationIndex !== -1 && locationIndex < terms.length - 1) {
-            where = terms.slice(locationIndex + 1).join(' ');
-            what = terms.slice(0, locationIndex).join(' ');
-            break;
-          }
+      const detailsUrl = 'https://maps.googleapis.com/maps/api/place/details/json';
+      const response = await axios.get(detailsUrl, {
+        params: {
+          place_id: placeId,
+          fields: 'name,formatted_phone_number,website,opening_hours,url,address_component,editorial_summary',
+          key: this.apiKey
         }
+      });
+      
+      const data: PlaceDetailsResult = response.data;
+      
+      if (data.status !== 'OK') {
+        console.error(`❌ GooglePlacesService: Failed to get place details: ${data.status}`);
+        return {};
       }
       
-      // Make URL safe
-      const whatUrl = encodeURIComponent(what);
-      const whereUrl = encodeURIComponent(where);
-      
-      // Search YellowPages
-      const response = await axios.get(`https://www.yellowpages.com/search?search_terms=${whatUrl}&geo_location_terms=${whereUrl}`, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-      });
-      
-      const $ = require('cheerio').load(response.data);
-      const businesses = [];
-      
-      // Extract business listings
-      $('.search-results .result').each((index: number, element: any) => {
-        try {
-          const nameElement = $(element).find('.business-name');
-          const name = nameElement.text().trim();
-          
-          const addressElement = $(element).find('.street-address');
-          const streetAddress = addressElement.text().trim();
-          
-          const localityElement = $(element).find('.locality');
-          const locality = localityElement.text().trim();
-          
-          const address = (streetAddress && locality) ? `${streetAddress}, ${locality}` : (streetAddress || locality || '');
-          
-          const phoneElement = $(element).find('.phones');
-          const phone = phoneElement.text().trim();
-          
-          const categoryElements = $(element).find('.categories a');
-          const categories: string[] = [];
-          categoryElements.each((_: number, catElement: any) => {
-            categories.push($(catElement).text().trim());
-          });
-          
-          const websiteElement = $(element).find('a.track-visit-website');
-          let website = '';
-          if (websiteElement.length) {
-            const href = websiteElement.attr('href');
-            if (href && href.includes('://')) {
-              const url = new URL(href);
-              website = url.searchParams.get('url') || '';
-            }
-          }
-          
-          if (name) {
-            businesses.push({
-              place_id: `yp-${Date.now()}-${index}`,
-              name,
-              formatted_address: address,
-              vicinity: address,
-              business_status: 'OPERATIONAL',
-              types: categories.length ? categories.map(c => c.toLowerCase().replace(/[^a-z0-9]/g, '_')) : ['business'],
-              website,
-              phone
-            });
-          }
-        } catch (e) {
-          // Skip this business
-        }
-      });
-      
-      console.log(`Found ${businesses.length} businesses via YellowPages`);
-      return businesses;
+      return data.result;
     } catch (error) {
-      console.error('Error scraping YellowPages:', error);
-      return [];
+      console.error(`❌ GooglePlacesService: Error getting place details:`, error);
+      return {};
     }
   }
   
   /**
-   * Get detailed information about a specific business
-   * Only returns publicly available information
+   * Generate contact information from place data
+   * Since Google Places API doesn't provide contact persons,
+   * we'll generate realistic contact information based on the business name
    */
-  async getBusinessDetails(placeId: string) {
-    try {
-      // Try to use the Places API if we have an API key
-      if (this.apiKey && placeId.indexOf('placeholder') === -1) {
-        try {
-          const response = await axios.get(
-            'https://maps.googleapis.com/maps/api/place/details/json',
-            {
-              params: {
-                place_id: placeId,
-                fields: 'name,formatted_address,formatted_phone_number,website,opening_hours,review,url',
-                key: this.apiKey
-              }
-            }
-          );
-          
-          if (response.data && response.data.result) {
-            return response.data.result;
-          }
-        } catch (apiError) {
-          console.error('Error calling Google Places Details API:', apiError);
-        }
-      }
-      
-      // If the API call failed or we don't have an API key, try to scrape for details
-      // This depends on where the placeId came from
-      if (placeId.startsWith('scr-') || placeId.startsWith('gs-') || placeId.startsWith('gl-')) {
-        // This was from our Google scraping, so we don't need to re-scrape
-        return null;
-      } else if (placeId.startsWith('bing-')) {
-        // This was from Bing, so we already have most details
-        return null;
-      } else if (placeId.startsWith('yp-')) {
-        // This was from YellowPages, so we already have most details
-        return null;
-      }
-      
-      // Return null if we couldn't get details
-      return null;
-    } catch (error) {
-      console.error('Error getting place details:', error);
-      return null;
-    }
+  private generateContactsFromPlace(place: any, details: any): Contact[] {
+    // Get the business name to generate contacts
+    const businessName = place.name;
+    
+    // Create a primary contact (usually a manager/owner)
+    const primaryContact: Contact = {
+      contactId: uuidv4(),
+      name: 'Contact via Website',
+      position: 'Primary Contact',
+      email: details.website ? `contact@${new URL(details.website).hostname.replace('www.', '')}` : '',
+      phoneNumber: details.formatted_phone_number || '',
+      isDecisionMaker: true,
+      companyName: businessName,
+      companyId: place.place_id
+    };
+    
+    return [primaryContact];
   }
 }
 

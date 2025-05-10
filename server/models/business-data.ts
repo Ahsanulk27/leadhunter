@@ -14,6 +14,7 @@ export interface Contact {
   phoneNumber?: string;
   isDecisionMaker?: boolean;
   companyName: string;
+  companyId?: string;  // Added to reference the source business ID
   notes?: string;
   lastContactDate?: Date | null;
 }
@@ -35,6 +36,7 @@ export interface BusinessData {
   yearEstablished?: string;
   source: string;
   sourceUrl: string;
+  imageUrl?: string;  // Added to store business image URL
   contacts?: Contact[];
   scrapedDate: Date;
   isDecisionMaker?: boolean;
