@@ -1,0 +1,23 @@
+{
+  "timestamp": "2025-05-10T09:23:40.340Z",
+  "passed_tests": 1,
+  "failed_tests": 1,
+  "pass_rate": 0.5,
+  "failures_by_type": {
+    "Property Management Test": 1
+  },
+  "test_history": [
+    {
+      "test_id": "0aef8c89-259c-47a1-8d9e-ffafb28252f2",
+      "timestamp": "2025-05-10T09:22:51.708Z",
+      "passed": false,
+      "error": "No businesses found"
+    },
+    {
+      "test_id": "ac046142-6373-46f5-a222-2ea2977a7afb",
+      "timestamp": "2025-05-10T09:22:51.708Z",
+      "passed": true
+    }
+  ],
+  "uptime_minutes": 0
+}

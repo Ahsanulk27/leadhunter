@@ -1,68 +1,54 @@
 /**
- * Startup operations for the LeadHunter application
+ * Startup operations for the NexLead application
  * Handles initial health checks and self-testing
  */
 
 import { testHarness } from './api/test-harness';
+import { googleSheetsService } from './api/google-sheets-service';
 
 /**
  * Run startup operations asynchronously
  */
 export async function runStartupOperations(): Promise<void> {
-  console.log('🚀 Running startup operations for LeadHunter...');
+  console.log('🚀 Running startup operations for NexLead...');
   
-  // Schedule test harness to run after a delay
-  setTimeout(async () => {
-    try {
-      console.log('🧪 Running initial self-test...');
-      const testResults = await testHarness.runAllTests();
-      
-      // Log test results summary
-      console.log(`🧪 Self-test complete: ${
-        testResults.test_results.passed_tests
-      }/${
-        testResults.test_results.total_tests
-      } tests passed`);
-      
-      if (testResults.test_results.failed_tests > 0) {
-        console.log(`⚠️ ${testResults.test_results.failed_tests} tests failed`);
-        console.log(`📊 Diagnoses: ${JSON.stringify(testResults.diagnostics, null, 2)}`);
-        
-        if (testResults.fixes_applied && testResults.fixes_applied.length > 0) {
-          console.log(`🔧 Applied fixes: ${testResults.fixes_applied.join(', ')}`);
-          
-          if (testResults.retest_results) {
-            console.log(`🧪 Retest results: ${
-              testResults.retest_results.passed_tests
-            }/${
-              testResults.retest_results.total_tests
-            } tests passed after fixes`);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error running startup test harness:', error);
+  try {
+    // Check Google Sheets API status
+    if (process.env.GOOGLE_API_KEY) {
+      const isValid = await googleSheetsService.checkApiKeyValidity();
+      console.log(`📊 Google Sheets API Key: ${isValid ? 'Valid' : 'Invalid'}`);
+    } else {
+      console.log('⚠️ Google Sheets API Key not found, export functionality will be limited');
     }
-  }, 5000); // Wait 5 seconds for server to fully initialize
+    
+    // Run all tests to verify system is operational
+    setTimeout(async () => {
+      try {
+        console.log('🧪 Running startup test harness...');
+        const diagnostics = await testHarness.runAllTests();
+        console.log(`🧪 Startup tests completed: ${diagnostics.passed_tests}/${diagnostics.passed_tests + diagnostics.failed_tests} tests passed`);
+      } catch (error) {
+        console.error('❌ Error running startup test harness:', error);
+      }
+    }, 5000);
+    
+    console.log('✅ Startup operations completed successfully');
+  } catch (error) {
+    console.error('❌ Error during startup operations:', error);
+  }
 }
 
 /**
  * Schedule periodic health checks
  */
 export function schedulePeriodicHealthChecks(): void {
-  // Run health check every 4 hours
+  // Run health checks every hour
   setInterval(async () => {
-    console.log('🔄 Running periodic scraper health check...');
-    
     try {
-      const healthCheck = await testHarness.runAllTests();
-      console.log(`🔄 Health check complete: ${
-        healthCheck.test_results.passed_tests
-      }/${
-        healthCheck.test_results.total_tests
-      } tests passed`);
+      console.log('🔍 Running periodic health check...');
+      await testHarness.runAllTests();
     } catch (error) {
-      console.error('❌ Error running periodic health check:', error);
+      console.error('❌ Error during periodic health check:', error);
     }
-  }, 4 * 60 * 60 * 1000); // Every 4 hours
+  }, 60 * 60 * 1000); // Every hour
 }
