@@ -15,6 +15,10 @@ export interface SearchParams {
   position?: string;
   size?: string;
   prioritizeDecisionMakers?: boolean;
+  page?: number;
+  limit?: number;
+  executionId?: string;
+  executionLog?: any;
 }
 
 export interface BusinessData {
@@ -31,13 +35,37 @@ export interface BusinessData {
   scrapeTimestamp?: number;
 }
 
+export interface ScrapingResult {
+  businesses: BusinessData[];
+  totalCount: number;
+  sources: string[];
+  page: number;
+  limit: number;
+  executionLog: any;
+}
+
 export class SearchController {
   /**
    * Search for business data from real sources only
    * This will try multiple real sources in sequence
    */
-  async searchBusinessData(params: SearchParams): Promise<BusinessData | null> {
-    console.log(`📍 SearchController: Processing search request with params:`, params);
+  async searchBusinessData(params: SearchParams): Promise<ScrapingResult | null> {
+    const executionId = params.executionId || `exec-${Date.now()}`;
+    console.log(`📍 [${executionId}] SearchController: Processing search request with params:`, params);
+    
+    // Set up pagination defaults
+    const page = params.page || 1;
+    const limit = params.limit || 10;
+    
+    // Initialize execution log if not provided
+    const executionLog = params.executionLog || {
+      execution_id: executionId,
+      timestamp: new Date().toISOString(),
+      query_params: params,
+      scraping_attempts: [],
+      scraping_results: [],
+      error_details: []
+    };
     
     // Build the search query for scrapers
     const searchQuery = params.company || 
@@ -45,12 +73,19 @@ export class SearchController {
                       (params.industry || params.location || ''));
     
     if (!searchQuery) {
-      console.log("📍 SearchController: No search query provided");
+      console.log(`📍 [${executionId}] SearchController: No search query provided`);
+      executionLog.error_details.push({
+        timestamp: new Date().toISOString(),
+        type: "validation_error",
+        message: "No search query could be constructed from the provided parameters"
+      });
       return null;
     }
     
-    // Track all our discovered businesses across sources
-    let realBusinesses: any[] = [];
+    // Track all businesses found across all sources
+    const allBusinesses: BusinessData[] = [];
+    const sourcesAttempted: string[] = [];
+    const sourcesSucceeded: string[] = [];
     
     // If we have a specific industry, try that first through industry directory
     if (params.industry && !params.company) {

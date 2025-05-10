@@ -240,22 +240,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dedicated /scrape API endpoint for direct access with query parameters
   app.get("/scrape", async (req: Request, res: Response) => {
     try {
-      console.log(`🔍 API /scrape route called with query parameters:`, req.query);
+      // Start measuring execution time
+      const startTime = Date.now();
+      const executionId = `scrape-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
       
-      // Extract query parameters
+      console.log(`🔍 [${executionId}] API /scrape route called with query parameters:`, req.query);
+      
+      // Extract query parameters with pagination and limit support
       const query = req.query.query as string || '';
       const location = req.query.location as string || '';
+      const page = parseInt(req.query.page as string || '1');
+      const limit = Math.min(parseInt(req.query.limit as string || '10'), 50); // Cap at 50 max results per page
       
+      // Validate parameters
       if (!query && !location) {
-        console.log(`❌ Missing required query parameters (query or location)`);
+        console.log(`❌ [${executionId}] Missing required query parameters (query or location)`);
         return res.status(400).json({
           error: "Missing parameters",
           message: "Please provide at least one of: 'query' (company or industry) or 'location' parameter",
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          execution_id: executionId
         });
       }
       
-      console.log(`🔍 Processing scrape request for query: '${query}', location: '${location}'`);
+      // Validate pagination parameters
+      if (isNaN(page) || page < 1) {
+        return res.status(400).json({
+          error: "Invalid pagination",
+          message: "Page parameter must be a positive integer",
+          timestamp: new Date().toISOString(),
+          execution_id: executionId
+        });
+      }
+      
+      if (isNaN(limit) || limit < 1) {
+        return res.status(400).json({
+          error: "Invalid limit",
+          message: "Limit parameter must be a positive integer",
+          timestamp: new Date().toISOString(),
+          execution_id: executionId
+        });
+      }
+      
+      console.log(`🔍 [${executionId}] Processing scrape request for query: '${query}', location: '${location}', page: ${page}, limit: ${limit}`);
+      
+      // Create execution log to track all scraping attempts
+      const executionLog: any = {
+        execution_id: executionId,
+        timestamp: new Date().toISOString(),
+        query_params: { query, location, page, limit },
+        scraping_attempts: [],
+        scraping_results: [],
+        error_details: []
+      };
       
       // Import our search controller which coordinates all data sources
       const { searchController } = await import('./controllers/search-controller');
@@ -266,74 +303,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
                            /[&\-',.]/.test(query) || 
                            query.split(' ').length > 1;
       
-      console.log(`🔍 Query '${query}' interpreted as: ${isCompanyName ? 'Company Name' : 'Industry'}`);
+      console.log(`🔍 [${executionId}] Query '${query}' interpreted as: ${isCompanyName ? 'Company Name' : 'Industry'}`);
       
       // Set up search params based on our determination
       const searchParams = {
         company: isCompanyName ? query : undefined,
         industry: !isCompanyName ? query : undefined,
-        location: location
+        location: location,
+        page: page,
+        limit: limit,
+        executionId: executionId,
+        executionLog: executionLog
       };
       
-      console.log(`🔍 Executing real scraping with params:`, searchParams);
+      console.log(`🔍 [${executionId}] Executing real scraping with params:`, searchParams);
       
       // Search across all real data sources
-      const scrapedData = await searchController.searchBusinessData(searchParams);
+      const scrapingResult = await searchController.searchBusinessData(searchParams);
+      
+      // Calculate execution time
+      const executionTime = Date.now() - startTime;
+      executionLog.execution_time_ms = executionTime;
       
       // ONLY return real data - if no results found, return 404 with clear error
-      if (!scrapedData) {
-        console.log(`❌ No real business data found after scraping all sources`);
+      if (!scrapingResult || !scrapingResult.businesses || scrapingResult.businesses.length === 0) {
+        console.log(`❌ [${executionId}] No real business data found after scraping all sources in ${executionTime}ms`);
+        
+        // Log all scraping attempts and errors for analysis
+        console.log(`📊 [${executionId}] Execution Log:`, JSON.stringify(executionLog, null, 2));
+        
         return res.status(404).json({
           error: "No results found",
           message: "No real business information could be found after searching multiple authentic sources including Google Maps, Yelp, and industry directories.",
           query,
           location,
           timestamp: new Date().toISOString(),
-          sources_checked: ["Google Maps", "Yelp", "Yellow Pages", "Industry Directories"]
+          execution_id: executionId,
+          execution_time_ms: executionTime,
+          sources_checked: ["Google Maps", "Yelp", "Yellow Pages", "Industry Directories"],
+          execution_log: executionLog
         });
       }
       
-      console.log(`✅ Successfully scraped real business data for: ${scrapedData.name}`);
+      // Calculate pagination metadata
+      const totalResults = scrapingResult.totalCount || scrapingResult.businesses.length;
+      const totalPages = Math.ceil(totalResults / limit);
       
-      // Return the results in a clean JSON format
+      console.log(`✅ [${executionId}] Successfully scraped real business data: ${scrapingResult.businesses.length} results in ${executionTime}ms`);
+      
+      // Return the results in a clean JSON format with pagination
       return res.status(200).json({
         status: "success",
         timestamp: new Date().toISOString(),
-        source: scrapedData.scrapeSource,
-        data: {
-          business_name: scrapedData.name,
-          industry: scrapedData.industry,
-          location: scrapedData.location,
-          address: scrapedData.address,
-          phone: scrapedData.phone,
-          website: scrapedData.website,
-          email: scrapedData.email,
-          contacts: scrapedData.contacts.map((contact: any) => ({
+        execution_id: executionId,
+        execution_time_ms: executionTime,
+        data: scrapingResult.businesses.map((business: any) => ({
+          business_name: business.name,
+          industry: business.industry,
+          location: business.location,
+          address: business.address,
+          phone: business.phone,
+          website: business.website,
+          email: business.email,
+          contacts: business.contacts.map((contact: any) => ({
             name: contact.name,
             position: contact.position,
             email: contact.email,
             phone: contact.companyPhone || contact.personalPhone,
             is_decision_maker: contact.isDecisionMaker
           }))
-        },
+        })),
         metadata: {
-          scrape_source: scrapedData.scrapeSource,
-          scrape_timestamp: scrapedData.scrapeTimestamp,
-          source_count: 1,
-          contact_count: scrapedData.contacts.length,
+          page: page,
+          limit: limit,
+          total_results: totalResults,
+          total_pages: totalPages,
           query_params: {
             query,
             location
-          }
+          },
+          scrape_sources: scrapingResult.sources || ["Google Maps", "Yelp", "Yellow Pages"],
+          execution_log: executionLog
         }
       });
     } catch (error) {
-      console.error("❌ Error during scraping operation:", error);
+      const errorTimestamp = new Date().toISOString();
+      console.error(`❌ Error during scraping operation at ${errorTimestamp}:`, error);
+      
+      // Log detailed error information for debugging
+      console.error(`Error stack: ${(error as any).stack || 'No stack trace available'}`);
+      
       return res.status(500).json({
         error: "Server error",
         message: "An error occurred while attempting to scrape business data.",
         details: (error as any).message,
-        timestamp: new Date().toISOString()
+        timestamp: errorTimestamp,
+        stack: process.env.NODE_ENV === 'development' ? (error as any).stack : undefined
       });
     }
   });
