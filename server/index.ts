@@ -12,6 +12,7 @@ import { setupVite, serveStatic, log } from './vite';
 import http from 'http';
 import { registerRoutes } from './routes';
 import { registerBulkLeadRoutes } from './routes/bulk-leads';
+import { registerDirectDownloadRoutes } from './routes/direct-download';
 import { GooglePlacesService } from './api/google-places-service';
 
 // Load environment variables
@@ -113,6 +114,9 @@ async function startServer(app: Express) {
     
     // Register bulk lead generation routes
     registerBulkLeadRoutes(app, googlePlacesService);
+    
+    // Register direct download routes for CSV exports on mobile
+    registerDirectDownloadRoutes(app);
     
     // Clean up routes to avoid conflicts
     if (app._router && app._router.stack) {

@@ -228,7 +228,7 @@ const BulkLeadGenerator: React.FC = () => {
     }
   };
   
-  // Server-side export for mobile compatibility
+  // Export for direct iPhone download
   const exportToCSV = async () => {
     if (!results || !results.businesses || results.businesses.length === 0) {
       toast({
@@ -243,14 +243,20 @@ const BulkLeadGenerator: React.FC = () => {
       // Show a loading toast
       toast({
         title: 'Preparing your export...',
-        description: 'We\'re creating your CSV file for download.',
+        description: 'Creating CSV file for direct download to your device.',
         variant: 'default'
       });
       
       setIsExporting(true);
       
-      // Send data to server for CSV generation
-      const response = await fetch('/api/bulk-leads/export-csv', {
+      // Generate the timestamp for the filename
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const sanitizedSearchTerm = (searchTerm || 'leads').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const filename = `nexlead_${sanitizedSearchTerm}_${timestamp}.csv`;
+      
+      // For iPhone, we'll use a special approach to trigger download directly to Files app
+      // First, post the data to our server where it can be temporarily stored
+      const dataResponse = await fetch('/api/bulk-leads/export-csv', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -262,52 +268,34 @@ const BulkLeadGenerator: React.FC = () => {
         })
       });
       
-      if (!response.ok) {
-        throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
-      }
-
-      // For iPhone/mobile compatibility, we'll download the file directly
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      
-      // The filename will be set by the server's Content-Disposition header
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const sanitizedSearchTerm = (searchTerm || 'leads').replace(/[^a-z0-9]/gi, '_').toLowerCase();
-      const filename = `nexlead_${sanitizedSearchTerm}_${timestamp}.csv`;
-      
-      // Create a hidden download link and trigger it
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = downloadUrl;
-      a.download = filename; // This is a fallback, the server's header takes precedence
-      
-      // Add to DOM, click it, and clean up
-      document.body.appendChild(a);
-      a.click();
-      
-      // Try to use a modern approach for iPhone/Safari
-      if (navigator.userAgent.match(/(iPhone|iPad|iPod|Safari)/i)) {
-        window.location.href = downloadUrl;
+      if (!dataResponse.ok) {
+        throw new Error('Failed to prepare data for download');
       }
       
-      // Clean up
+      // Now create a direct download URL to our server endpoint
+      const downloadUrl = `/api/direct-download/csv?filename=${encodeURIComponent(filename)}&searchTerm=${encodeURIComponent(searchTerm)}`;
+      
+      // Open this URL in the current window to trigger the download
+      // This will open the browser's native save dialog
+      window.open(downloadUrl, '_blank');
+      
+      // Reset the exporting state and show success message
+      // Use a slightly longer timeout since we're redirecting
       setTimeout(() => {
-        window.URL.revokeObjectURL(downloadUrl);
-        document.body.removeChild(a);
         setIsExporting(false);
         
         toast({
-          title: 'Export complete!',
-          description: `${results.totalBusinesses} leads have been exported to CSV`,
+          title: 'Download initiated!',
+          description: 'Your CSV file should now be downloading to your device.',
           variant: 'default'
         });
-      }, 100);
+      }, 500);
     } catch (error) {
-      console.error('Error exporting CSV:', error);
+      console.error('Error initiating CSV download:', error);
       setIsExporting(false);
       
       toast({
-        title: 'Export failed',
+        title: 'Download failed',
         description: 'There was a problem creating your export file. Please try again.',
         variant: 'destructive'
       });
