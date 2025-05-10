@@ -105,7 +105,30 @@ export default function LeadFinder() {
       <div className="max-w-7xl mx-auto">
         <SearchForm onSearch={handleSearch} isLoading={isLoading} />
         
-        {searchResults && (
+        {searchError ? (
+          <div className="bg-red-50 border border-red-200 text-red-800 rounded-md p-4 mb-6">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">Search Error</h3>
+                <div className="mt-2 text-sm text-red-700">
+                  <p>{searchError}</p>
+                  <p className="mt-2">
+                    <strong>Tips:</strong> For best results, try searching for a specific company name that has publicly available information.
+                    Our system only returns 100% real data from publicly available sources.
+                  </p>
+                  <p className="mt-2">
+                    Example searches: "Google in California", "Microsoft in Seattle", "Apple Inc"
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : searchResults && (
           <SearchResults 
             results={searchResults} 
             isLoading={isLoading}
@@ -114,7 +137,7 @@ export default function LeadFinder() {
           />
         )}
         
-        {savedLeads && savedLeads.length > 0 && (
+        {savedLeads && Array.isArray(savedLeads) && savedLeads.length > 0 && (
           <SavedLeads leads={savedLeads} isLoading={savedLeadsLoading} />
         )}
         

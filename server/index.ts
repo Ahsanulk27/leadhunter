@@ -8,9 +8,21 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Health check endpoint - but don't interfere with frontend routing
+// Make sure API endpoints don't conflict with frontend routes
+// Health check endpoint
 app.get('/api/health', (req, res) => {
   res.status(200).send('OK');
+});
+
+// Remove any root route handler that might override the frontend
+app.get('/', (req, res, next) => {
+  if (req.headers.accept?.includes('text/html')) {
+    // Let the static file handler or Vite handle HTML requests
+    next();
+  } else {
+    // For non-HTML requests (like API health checks), respond with simple OK
+    res.status(200).send('API running');
+  }
 });
 
 app.use((req, res, next) => {
