@@ -17,7 +17,7 @@ dotenv.config();
 
 // Create Express application
 const app: Express = express();
-const PORT = process.env.PORT || 5000;
+const PORT = parseInt(process.env.PORT || '5000', 10);
 
 // Parse JSON body
 app.use(express.json());
