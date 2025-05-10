@@ -106,17 +106,36 @@ async function startServer(app: Express) {
     // Register API routes first
     await registerRoutes(app);
     
-    // Remove the default root handler that was blocking the React app
-    app._router.stack = app._router.stack.filter((layer: any) => {
-      return !(layer.route && layer.route.path === '/');
-    });
+    // Clean up routes to avoid conflicts
+    if (app._router && app._router.stack) {
+      app._router.stack = app._router.stack.filter((layer: any) => {
+        return !(layer.route && layer.route.path === '/');
+      });
+    }
     
-    // Setup Vite development environment
+    // Setup Vite for development or static serving for production
     if (process.env.NODE_ENV === 'development') {
       await setupVite(app, server);
     } else {
+      // For production, serve the React build
       serveStatic(app);
     }
+    
+    // Add a fallback route handler for all routes not caught
+    // This ensures all React routes work via history API
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api') || req.path.startsWith('/scrape')) {
+        return next();
+      }
+      
+      if (process.env.NODE_ENV === 'development') {
+        // In development, the Vite middleware will handle this
+        next();
+      } else {
+        // In production, serve the index.html
+        res.sendFile(path.resolve(__dirname, 'public', 'index.html'));
+      }
+    });
     
     // Start the server
     server.listen(PORT, () => {
