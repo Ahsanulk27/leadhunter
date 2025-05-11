@@ -52,7 +52,7 @@ app.get('/scrape', async (req: Request, res: Response) => {
     const location = req.query.location as string;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
-    
+
     if (!query) {
       return res.status(400).json({
         error: 'Query parameter is required',
@@ -60,22 +60,22 @@ app.get('/scrape', async (req: Request, res: Response) => {
         timestamp: new Date().toISOString()
       });
     }
-    
+
     console.log(`📊 API Request: Scraping for "${query}" in ${location || 'any location'}`);
-    
+
     const searchParams: SearchParams = {
       query,
       location,
       page,
       limit
     };
-    
+
     const result = await searchController.searchBusinessData(searchParams);
-    
+
     return res.json(result);
   } catch (error) {
     console.error('Error handling scrape request:', error);
-    
+
     return res.status(500).json({
       error: 'An unexpected error occurred',
       error_code: 'SERVER_ERROR',
@@ -90,7 +90,7 @@ app.get('/scrape', async (req: Request, res: Response) => {
 // Global error handler
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error('Unhandled error:', err);
-  
+
   res.status(500).json({
     error: 'An unexpected error occurred',
     error_code: 'SERVER_ERROR',
@@ -105,61 +105,46 @@ async function startServer(app: Express) {
   try {
     // Run startup operations (health checks, API key validation, etc.)
     await runStartupOperations();
-    
+
     // Schedule periodic health checks
     schedulePeriodicHealthChecks();
-    
+
     // Create HTTP server
     const server = http.createServer(app);
-    
+
     // Create Google Places service for bulk lead generation
     const googlePlacesService = new GooglePlacesService();
-    
+
     // Register standard API routes
     await registerRoutes(app);
-    
+
     // Register bulk lead generation routes
     registerBulkLeadRoutes(app, googlePlacesService);
-    
+
     // Register direct download routes for CSV exports on mobile
     registerDirectDownloadRoutes(app);
-    
+
     // Register B2C lead generation routes
     registerB2CRoutes(app);
-    
+
     // Register verification routes
     registerVerificationRoutes(app);
-    
+
     // Register validation routes for data quality assurance
     registerValidationRoutes(app);
-    
-    // Clean up routes to avoid conflicts
-    if (app._router && app._router.stack) {
-      app._router.stack = app._router.stack.filter((layer: any) => {
-        return !(layer.route && layer.route.path === '/');
-      });
-    }
-    
-    // Setup Vite for development or static serving for production
-    if (process.env.NODE_ENV === 'development') {
-      await setupVite(app, server);
-    } else {
-      // For production, serve the React build
-      serveStatic(app);
-    }
-    
-    // Add a fallback route handler for all routes not caught
-    // This ensures all React routes work via history API
-    // Ensure health check endpoint exists
+
+    // Add health check endpoint for Autoscale deployments
     app.get('/', (req: Request, res: Response) => {
       res.status(200).send('OK');
     });
 
+    // Add a fallback route handler for all other routes
+    // This ensures all React routes work via history API
     app.get('*', (req, res, next) => {
       if (req.path.startsWith('/api') || req.path.startsWith('/scrape')) {
         return next();
       }
-      
+
       if (process.env.NODE_ENV === 'development') {
         // In development, the Vite middleware will handle this
         next();
@@ -168,7 +153,15 @@ async function startServer(app: Express) {
         res.sendFile(path.resolve(__dirname, 'public', 'index.html'));
       }
     });
-    
+
+    // Setup Vite for development or static serving for production
+    if (process.env.NODE_ENV === 'development') {
+      await setupVite(app, server);
+    } else {
+      // For production, serve the React build
+      serveStatic(app);
+    }
+
     // Start the server with better error handling
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Server running on port ${PORT}`);
@@ -182,7 +175,7 @@ async function startServer(app: Express) {
         process.exit(1);
       }
     });
-    
+
     return server;
   } catch (error) {
     console.error('Failed to start server:', error);
