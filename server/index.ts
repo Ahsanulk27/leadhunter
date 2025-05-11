@@ -31,7 +31,10 @@ app.use(express.json());
 // Use URL-encoded bodies
 app.use(express.urlencoded({ extended: true }));
 
-// Root route will now be handled by the React frontend after Vite setup
+// Root health check endpoint for Autoscale deployments
+app.get('/', (req: Request, res: Response) => {
+  res.status(200).send('OK');
+});
 
 // API Health Check
 app.get('/api/health', (req: Request, res: Response) => {
@@ -147,6 +150,11 @@ async function startServer(app: Express) {
     
     // Add a fallback route handler for all routes not caught
     // This ensures all React routes work via history API
+    // Ensure health check endpoint exists
+    app.get('/', (req: Request, res: Response) => {
+      res.status(200).send('OK');
+    });
+
     app.get('*', (req, res, next) => {
       if (req.path.startsWith('/api') || req.path.startsWith('/scrape')) {
         return next();
