@@ -1,0 +1,6 @@
+2025-05-10T08-42-04.794Z - Starting test harness run
+2025-05-10T08-42-04.794Z - Checking scraper dependencies
+2025-05-10T08-42-04.794Z - Dependencies status: {"all_checks_passed":false,"checks":{"axios":true,"puppeteer":false,"cheerio":false,"filesystem":true}}
+2025-05-10T08-42-04.794Z - Verifying Puppeteer setup
+2025-05-10T08-42-04.794Z - Puppeteer status: {"all_checks_passed":false,"error":"Could not find Chrome (ver. 136.0.7103.92). This can occur if either\n 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or\n 2. your cache path is incorrectly configured (which is: /home/runner/.cache/puppeteer).\nFor (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration."}
+2025-05-10T08-42-04.794Z - Running scraping self-tests

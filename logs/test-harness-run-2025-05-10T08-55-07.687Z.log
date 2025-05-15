@@ -1,0 +1,7 @@
+2025-05-10T08-55-07.687Z - Starting test harness run
+2025-05-10T08-55-07.687Z - Checking scraper dependencies
+2025-05-10T08-55-07.687Z - Dependencies status: {"all_checks_passed":false,"checks":{"axios":true,"puppeteer":false,"cheerio":false,"filesystem":true}}
+2025-05-10T08-55-07.687Z - Verifying Puppeteer setup
+2025-05-10T08-55-07.687Z - Puppeteer status: {"all_checks_passed":false,"error":"puppeteerWrapper.launch is not a function"}
+2025-05-10T08-55-07.687Z - Running scraping self-tests
+2025-05-10T08-55-07.687Z - Test harness run complete. Report saved to /home/runner/workspace/logs/scraper-status-report-2025-05-10T08-55-07.687Z.json

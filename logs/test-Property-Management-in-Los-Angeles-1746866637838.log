@@ -1,0 +1,16 @@
+[2025-05-10T08:43:57.838Z] Starting test: Property Management in Los Angeles
+[2025-05-10T08:43:57.838Z] Query: Property Management, Location: Los Angeles, CA
+[2025-05-10T08:43:59.244Z] Test FAILED: No results returned
+[2025-05-10T08:43:59.244Z] Diagnosed issue: No matching results found across all sources. The search query might be too specific or yielding no results.
+[2025-05-10T08:43:59.244Z] Execution log: {
+  "execution_id": "test-1746866637838-0aiz1",
+  "timestamp": "2025-05-10T08:43:57.838Z",
+  "query_params": {
+    "query": "Property Management",
+    "location": "Los Angeles, CA"
+  },
+  "scraping_attempts": [],
+  "scraping_results": [],
+  "error_details": [],
+  "final_status": "no_results"
+}

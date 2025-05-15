@@ -1,0 +1,16 @@
+[2025-05-10T08:43:59.246Z] Starting test: Plumbers in New York
+[2025-05-10T08:43:59.246Z] Query: Plumber, Location: New York, NY
+[2025-05-10T08:43:59.592Z] Test FAILED: No results returned
+[2025-05-10T08:43:59.592Z] Diagnosed issue: No matching results found across all sources. The search query might be too specific or yielding no results.
+[2025-05-10T08:43:59.592Z] Execution log: {
+  "execution_id": "test-1746866639246-787kz",
+  "timestamp": "2025-05-10T08:43:59.246Z",
+  "query_params": {
+    "query": "Plumber",
+    "location": "New York, NY"
+  },
+  "scraping_attempts": [],
+  "scraping_results": [],
+  "error_details": [],
+  "final_status": "no_results"
+}

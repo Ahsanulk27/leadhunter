@@ -7,6 +7,8 @@ import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { ConsumerLead } from '../models/consumer-lead';
 import { googlePlacesService } from './google-places-service';
+import dotenv from 'dotenv';
+dotenv.config();
 
 // Consumer targeting keywords to use in searches
 const CONSUMER_KEYWORDS = [
