@@ -26,10 +26,10 @@ const app: Express = express();
 const PORT = parseInt(process.env.PORT || "5000", 10);
 
 // Parse JSON body
-app.use(express.json());
+app.use(express.json({ limit: "5mb" }));
 
 // Use URL-encoded bodies
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
 // Root health check endpoint for Autoscale deployments
 app.get("/", (req: Request, res: Response) => {

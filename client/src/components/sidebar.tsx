@@ -1,16 +1,16 @@
 import { useLocation, Link } from "wouter";
 import { cn } from "@/lib/utils";
-import { 
-  Search, 
-  Table, 
-  History, 
-  BarChart, 
-  Settings, 
+import {
+  Search,
+  Table,
+  History,
+  BarChart,
+  Settings,
   Database,
   Globe,
   Users,
   UserRound,
-  FileSpreadsheet
+  FileSpreadsheet,
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -57,7 +57,7 @@ export default function Sidebar() {
       title: "Settings",
       href: "/settings",
       icon: <Settings className="w-6 h-6" />,
-    }
+    },
   ];
 
   return (
@@ -65,9 +65,9 @@ export default function Sidebar() {
       <div className="h-full px-3 py-4 overflow-y-auto">
         <ul className="space-y-2">
           {navItems.map((item) => {
-            const isActive = location === item.href || 
-              (item.href === "/" && location === "");
-            
+            const isActive =
+              location === item.href || (item.href === "/" && location === "");
+
             return (
               <li key={item.href}>
                 <Link href={item.href}>
@@ -79,10 +79,12 @@ export default function Sidebar() {
                         : "text-gray-600 hover:bg-gray-100"
                     )}
                   >
-                    <span className={cn(
-                      "w-6 h-6",
-                      isActive ? "text-primary" : "text-gray-500"
-                    )}>
+                    <span
+                      className={cn(
+                        "w-6 h-6",
+                        isActive ? "text-primary" : "text-gray-500"
+                      )}
+                    >
                       {item.icon}
                     </span>
                     <span className="ml-3">{item.title}</span>
@@ -92,7 +94,6 @@ export default function Sidebar() {
             );
           })}
         </ul>
-
       </div>
     </aside>
   );
