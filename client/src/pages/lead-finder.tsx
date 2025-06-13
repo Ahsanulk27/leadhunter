@@ -9,6 +9,7 @@ import SearchLoadingState from "@/components/search-loading-state";
 import ApiStatusDashboard from "@/components/api-status-dashboard";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { motion } from "framer-motion";
 
 export default function LeadFinder() {
   const [isLoading, setIsLoading] = useState(false);
@@ -216,112 +217,106 @@ export default function LeadFinder() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto">
-      <SearchForm onSearch={handleSearch} isLoading={isLoading} />
-
-      {isLoading && (
-        <div className="bg-white border border-gray-200 rounded-md shadow-sm mb-6">
-          <SearchLoadingState
-            industry={searchParams.industry}
-            company={searchParams.company}
-            isVisible={isLoading}
-          />
-        </div>
-      )}
-
-      {!isLoading && searchError ? (
-        <div className="bg-red-50 border border-red-200 text-red-800 rounded-md p-4 mb-6">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg
-                className="h-5 w-5 text-red-500"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">Search Error</h3>
-              <div className="mt-2 text-sm text-red-700">
-                <p>{searchError}</p>
-                {searchError.includes("Google Places API") ? (
-                  <div>
-                    <p className="mt-2">
-                      <strong>API Access Issue:</strong> We're currently
-                      experiencing an issue with our data provider connection.
-                      The application can only show real business data from
-                      Google Places API, and this service is temporarily
-                      unavailable.
-                    </p>
-                    <p className="mt-2">
-                      <strong>Technical Details:</strong>{" "}
-                      {searchError.includes("enable")
-                        ? "The Google Places API needs to be enabled for the API key being used."
-                        : "There's an issue with the Google Places API configuration."}
-                    </p>
-                    <p className="mt-2">
-                      <strong>What you can do:</strong> This is a server
-                      configuration issue that requires administrator attention.
-                      Please try again later once the API access has been
-                      properly configured.
-                    </p>
-                  </div>
-                ) : (
-                  <div>
-                    <p className="mt-2">
-                      <strong>Tips:</strong> For best results, try searching for
-                      a specific company name that has publicly available
-                      information. Our system only returns 100% real data from
-                      publicly available sources.
-                    </p>
-                    <p className="mt-2">
-                      Example searches: "Google in California", "Microsoft in
-                      Seattle", "Apple Inc"
-                    </p>
-                  </div>
-                )}
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-10">
+      <motion.div
+        className="max-w-5xl w-full mx-auto px-2 sm:px-6"
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
+      >
+        <SearchForm onSearch={handleSearch} isLoading={isLoading} />
+        {isLoading && (
+          <div className="bg-white border border-gray-200 rounded-md shadow-sm mb-6">
+            <SearchLoadingState
+              industry={searchParams.industry}
+              company={searchParams.company}
+              isVisible={isLoading}
+            />
+          </div>
+        )}
+        {!isLoading && searchError ? (
+          <div className="bg-red-50 border border-red-200 text-red-800 rounded-md p-4 mb-6">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg
+                  className="h-5 w-5 text-red-500"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">
+                  Search Error
+                </h3>
+                <div className="mt-2 text-sm text-red-700">
+                  <p>{searchError}</p>
+                  {searchError.includes("Google Places API") ? (
+                    <div>
+                      <p className="mt-2">
+                        <strong>API Access Issue:</strong> We're currently
+                        experiencing an issue with our data provider connection.
+                        The application can only show real business data from
+                        Google Places API, and this service is temporarily
+                        unavailable.
+                      </p>
+                      <p className="mt-2">
+                        <strong>Technical Details:</strong>{" "}
+                        {searchError.includes("enable")
+                          ? "The Google Places API needs to be enabled for the API key being used."
+                          : "There's an issue with the Google Places API configuration."}
+                      </p>
+                      <p className="mt-2">
+                        <strong>What you can do:</strong> This is a server
+                        configuration issue that requires administrator
+                        attention. Please try again later once the API access
+                        has been properly configured.
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="mt-2">
+                        <strong>Tips:</strong> For best results, try searching
+                        for a specific company name that has publicly available
+                        information. Our system only returns 100% real data from
+                        publicly available sources.
+                      </p>
+                      <p className="mt-2">
+                        Example searches: "Google in California", "Microsoft in
+                        Seattle", "Apple Inc"
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
+        ) : !isLoading && searchResults ? (
+          <SearchResults
+            results={searchResults}
+            isLoading={false}
+            onSaveLead={handleSaveLead}
+            onExport={handleExport}
+          />
+        ) : null}
+        <div className="mt-6">
+          <ApiStatusDashboard />
         </div>
-      ) : !isLoading && searchResults ? (
-        // Log the data before attempting to render it
-        (() => {
-          console.log(
-            "DEBUG: About to render search results with data:",
-            searchResults
-          );
-          return (
-            <SearchResults
-              results={searchResults}
-              isLoading={false}
-              onSaveLead={handleSaveLead}
-              onExport={handleExport}
-            />
-          );
-        })()
-      ) : null}
-
-      {/* API Status Dashboard */}
-      <div className="mt-6">
-        <ApiStatusDashboard />
-      </div>
-
-      {savedLeads && Array.isArray(savedLeads) && savedLeads.length > 0 && (
-        <SavedLeads leads={savedLeads} isLoading={savedLeadsLoading} />
-      )}
-
-      <ExportModal
-        isOpen={isExportModalOpen}
-        onClose={() => setIsExportModalOpen(false)}
-        leads={searchResults?.contacts || []}
-        company={searchResults?.company}
-      />
+        {savedLeads && Array.isArray(savedLeads) && savedLeads.length > 0 && (
+          <SavedLeads leads={savedLeads} isLoading={savedLeadsLoading} />
+        )}
+        <ExportModal
+          isOpen={isExportModalOpen}
+          onClose={() => setIsExportModalOpen(false)}
+          leads={searchResults?.contacts || []}
+          company={searchResults?.company}
+        />
+      </motion.div>
     </div>
   );
 }

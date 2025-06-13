@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
+import Home from "@/pages/home";
 import LeadFinder from "@/pages/lead-finder";
 import MyLeads from "@/pages/my-leads";
 import SearchHistory from "@/pages/search-history";
@@ -17,13 +18,14 @@ function Router() {
   return (
     <Layout>
       <Switch>
-        <Route path="/" component={LeadFinder} />
+        <Route path="/" component={Home} />
+        <Route path="/lead-finder" component={LeadFinder} />
         <Route path="/my-leads" component={MyLeads} />
         <Route path="/search-history" component={SearchHistory} />
         <Route path="/bulk-leads" component={BulkLeads} />
         <Route path="/b2c-leads" component={B2CLeads} />
         <Route path="/consumer-bulk-leads" component={ConsumerBulkLeads} />
-        
+
         {/* These routes are placeholders for future implementation */}
         <Route path="/analytics">
           <div className="min-h-screen flex items-center justify-center">
@@ -34,7 +36,7 @@ function Router() {
           </div>
         </Route>
         <Route path="/settings" component={SettingsPage} />
-        
+
         {/* Fallback to 404 */}
         <Route component={NotFound} />
       </Switch>

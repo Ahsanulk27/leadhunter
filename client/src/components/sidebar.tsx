@@ -11,6 +11,7 @@ import {
   Users,
   UserRound,
   FileSpreadsheet,
+  Home as HomeIcon,
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -19,8 +20,13 @@ export default function Sidebar() {
   // Navigation items
   const navItems = [
     {
-      title: "Lead Finder",
+      title: "Home",
       href: "/",
+      icon: <HomeIcon className="w-6 h-6" />,
+    },
+    {
+      title: "Lead Finder",
+      href: "/lead-finder",
       icon: <Search className="w-6 h-6" />,
     },
     {
@@ -66,7 +72,7 @@ export default function Sidebar() {
         <ul className="space-y-2">
           {navItems.map((item) => {
             const isActive =
-              location === item.href || (item.href === "/" && location === "");
+              location === item.href || (item.href === "/" && location === "/");
 
             return (
               <li key={item.href}>
