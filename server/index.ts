@@ -17,6 +17,7 @@ import { registerB2CRoutes } from "./routes/b2c-routes";
 import { registerVerificationRoutes } from "./routes/verification-routes";
 import { registerValidationRoutes } from "./routes/validation-routes";
 import { GooglePlacesService } from "./api/google-places-service";
+import authRoutes from "./routes/auth-routes";
 
 // Load environment variables
 dotenv.config();
@@ -117,6 +118,9 @@ async function startServer(app: Express) {
 
     // Register standard API routes
     await registerRoutes(app);
+
+    // Register auth routes
+    app.use("/api/auth", authRoutes);
 
     // Register bulk lead generation routes
     app.use("/api/bulk-leads", createBulkLeadRouter(googlePlacesService));

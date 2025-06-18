@@ -1,6 +1,0 @@
-2025-05-10T09-16-17.813Z - Starting test harness run
-2025-05-10T09-16-17.813Z - Checking scraper dependencies
-2025-05-10T09-16-17.813Z - Dependencies status: {"all_checks_passed":false,"checks":{"axios":true,"puppeteer":false,"cheerio":false,"filesystem":true}}
-2025-05-10T09-16-17.813Z - Verifying Puppeteer setup
-2025-05-10T09-16-17.813Z - Puppeteer status: {"all_checks_passed":false,"error":"puppeteerWrapper.launch is not a function"}
-2025-05-10T09-16-17.813Z - Running scraping self-tests

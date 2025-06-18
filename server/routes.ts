@@ -95,7 +95,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Search for company leads
   app.post("/api/search", async (req: Request, res: Response) => {
     try {
-      console.log("📍 API /search route called with request body:", req.body);
+      if (!googlePlacesService.isServiceConfigured()) {
+        console.error("❌ Google Places API is not properly configured");
+        return res.status(500).json({
+          error: "Google Places API is not properly configured",
+          error_code: "PLACES_API_NOT_CONFIGURED",
+          message:
+            "Please check your environment configuration and ensure GOOGLE_API_KEY is set correctly.",
+          timestamp: new Date().toISOString(),
+        });
+      }
+
       const {
         company,
         industry,
@@ -104,6 +114,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         size,
         prioritizeDecisionMakers,
       } = req.body;
+
+      // Validate required search parameters
+      if (!company && !industry && !location) {
+        return res.status(400).json({
+          error: "Missing search criteria",
+          error_code: "MISSING_SEARCH_CRITERIA",
+          message:
+            "Please provide either a company name, industry, or location to search for leads.",
+          timestamp: new Date().toISOString(),
+        });
+      }
 
       console.log(`📍 Search parameters: 
         - Company: ${company || "Not provided"}

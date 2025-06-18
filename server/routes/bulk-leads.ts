@@ -155,6 +155,17 @@ export function createBulkLeadRouter(googlePlacesService: GooglePlacesService) {
   // Custom bulk lead search endpoint
   router.post("/custom", async (req: Request, res: Response) => {
     try {
+      if (!googlePlacesService.isServiceConfigured()) {
+        console.error("❌ Google Places API is not properly configured");
+        return res.status(500).json({
+          error: "Google Places API is not properly configured",
+          error_code: "PLACES_API_NOT_CONFIGURED",
+          message:
+            "Please check your environment configuration and ensure GOOGLE_API_KEY is set correctly.",
+          timestamp: new Date().toISOString(),
+        });
+      }
+
       // Validate request body
       const {
         query,

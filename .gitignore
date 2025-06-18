@@ -1,6 +1,30 @@
+# Dependencies
 node_modules
+
+# Build output
 dist
+
+# Generated data
+logs/
+exports/
+csv_results/
+consumer_leads/
+validation_results/
+verification_results/
+batch_results/
+cache/
+
+# System files
 .DS_Store
+
+# Server files
 server/public
+
+# Build config
 vite.config.ts.*
 *.tar.gz
+
+# Environment variables
+.env
+.env.local
+.env.*.local

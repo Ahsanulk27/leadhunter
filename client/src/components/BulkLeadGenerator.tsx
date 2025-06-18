@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -6,7 +7,6 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -19,8 +19,15 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Download } from "lucide-react";
-import { SearchX } from "lucide-react";
+import {
+  Loader2,
+  Download,
+  Search,
+  Bookmark,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 interface Location {
   name: string;
@@ -59,18 +66,18 @@ interface SearchResults {
 }
 
 const BulkLeadGenerator: React.FC = () => {
-  // State for form inputs
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   const [maxResults, setMaxResults] = useState<number>(25);
   const [onlyDecisionMakers, setOnlyDecisionMakers] = useState(true);
-
-  // State for data loading and exporting
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [locations, setLocations] = useState<Location[]>([]);
   const [industries, setIndustries] = useState<Industry[]>([]);
   const [results, setResults] = useState<SearchResults | null>(null);
+  const [expandedBusinesses, setExpandedBusinesses] = useState<
+    Record<string, boolean>
+  >({});
 
   const { toast } = useToast();
 
@@ -80,63 +87,49 @@ const BulkLeadGenerator: React.FC = () => {
     if (savedSearch) {
       try {
         const parsedResults = JSON.parse(savedSearch);
-        console.log(
-          "Loaded saved search results from session storage:",
-          parsedResults
-        );
         setResults(parsedResults);
 
-        // Also restore the search term
         const savedSearchTerm =
           window.sessionStorage.getItem("bulkLeadSearchTerm");
-        if (savedSearchTerm) {
-          setSearchTerm(savedSearchTerm);
-        }
+        if (savedSearchTerm) setSearchTerm(savedSearchTerm);
 
-        // Restore selected locations
         const savedLocations = window.sessionStorage.getItem(
           "bulkLeadSelectedLocations"
         );
-        if (savedLocations) {
-          setSelectedLocations(JSON.parse(savedLocations));
-        }
+        if (savedLocations) setSelectedLocations(JSON.parse(savedLocations));
       } catch (error) {
         console.error("Error parsing saved search results:", error);
       }
     }
 
-    // Load available locations
     fetchLocations();
-
-    // Load available industries
     fetchIndustries();
   }, []);
+
+  // Toggle business expansion
+  const toggleBusinessExpansion = (businessName: string) => {
+    setExpandedBusinesses((prev) => ({
+      ...prev,
+      [businessName]: !prev[businessName],
+    }));
+  };
 
   // Fetch available locations from the backend
   const fetchLocations = async () => {
     try {
-      console.log("Fetching locations...");
       const response = await fetch("/api/bulk-leads/locations");
-      console.log("Locations response status:", response.status);
-
-      if (!response.ok) {
+      if (!response.ok)
         throw new Error(`HTTP error! status: ${response.status}`);
-      }
 
       const data = await response.json();
-      console.log("Locations response data:", data);
-
       if (data && data.locations) {
-        // Format location names for display
         const formattedLocations = data.locations.map((loc: string) => ({
           name: loc,
           displayName: loc
             .replace(/_/g, " ")
             .replace(/\b\w/g, (l: string) => l.toUpperCase()),
         }));
-
         setLocations(formattedLocations);
-        console.log("Loaded locations:", formattedLocations);
       } else {
         throw new Error("Invalid response format");
       }
@@ -153,28 +146,19 @@ const BulkLeadGenerator: React.FC = () => {
   // Fetch available industries from the backend
   const fetchIndustries = async () => {
     try {
-      console.log("Fetching industries...");
       const response = await fetch("/api/bulk-leads/industries");
-      console.log("Industries response status:", response.status);
-
-      if (!response.ok) {
+      if (!response.ok)
         throw new Error(`HTTP error! status: ${response.status}`);
-      }
 
       const data = await response.json();
-      console.log("Industries response data:", data);
-
       if (data && data.industries) {
-        // Format industry names for display
         const formattedIndustries = data.industries.map((ind: string) => ({
           name: ind,
           displayName: ind
             .replace(/_/g, " ")
             .replace(/\b\w/g, (l: string) => l.toUpperCase()),
         }));
-
         setIndustries(formattedIndustries);
-        console.log("Loaded industries:", formattedIndustries);
       } else {
         throw new Error("Invalid response format");
       }
@@ -190,13 +174,10 @@ const BulkLeadGenerator: React.FC = () => {
 
   // Toggle location selection
   const toggleLocation = (locationName: string) => {
-    if (selectedLocations.includes(locationName)) {
-      setSelectedLocations(
-        selectedLocations.filter((loc) => loc !== locationName)
-      );
-    } else {
-      setSelectedLocations([...selectedLocations, locationName]);
-    }
+    const newLocations = selectedLocations.includes(locationName)
+      ? selectedLocations.filter((loc) => loc !== locationName)
+      : [...selectedLocations, locationName];
+    setSelectedLocations(newLocations);
   };
 
   // Handle form submission to search for leads
@@ -223,14 +204,12 @@ const BulkLeadGenerator: React.FC = () => {
 
     setIsLoading(true);
     setResults(null);
+    setExpandedBusinesses({});
 
     try {
-      // Call the custom bulk lead search endpoint
       const response = await fetch("/api/bulk-leads/custom", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: searchTerm,
           locations: selectedLocations,
@@ -239,20 +218,12 @@ const BulkLeadGenerator: React.FC = () => {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to search for leads");
-      }
+      if (!response.ok) throw new Error("Failed to search for leads");
 
       const data = await response.json();
+      if (data.error) throw new Error(data.error);
 
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      // Update state with search results
       setResults(data);
-
-      // Save search results to session storage
       window.sessionStorage.setItem("bulkLeadResults", JSON.stringify(data));
       window.sessionStorage.setItem("bulkLeadSearchTerm", searchTerm);
       window.sessionStorage.setItem(
@@ -260,7 +231,6 @@ const BulkLeadGenerator: React.FC = () => {
         JSON.stringify(selectedLocations)
       );
 
-      // Show success toast
       toast({
         title: "Search Complete",
         description: `Found ${data.totalBusinesses} businesses with ${data.totalContacts} contacts across ${data.totalLocations} locations.`,
@@ -270,24 +240,15 @@ const BulkLeadGenerator: React.FC = () => {
       console.error("Error searching for leads:", error);
       toast({
         title: "Search Failed",
-        description: "Failed to search for leads. Please try again.",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to search for leads. Please try again.",
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // Utility function to properly escape CSV values
-  const escapeCsvValue = (value: string) => {
-    if (!value) return '""';
-
-    // If value contains commas, quotes, or newlines, wrap in quotes and escape internal quotes
-    if (value.includes(",") || value.includes('"') || value.includes("\n")) {
-      return `"${value.replace(/"/g, '""')}"`;
-    }
-
-    return value;
   };
 
   // Handle exporting search results as CSV
@@ -303,7 +264,6 @@ const BulkLeadGenerator: React.FC = () => {
     }
 
     try {
-      // Show loading toast
       toast({
         title: "Preparing export...",
         description: "Creating CSV file for download",
@@ -312,21 +272,16 @@ const BulkLeadGenerator: React.FC = () => {
 
       setIsExporting(true);
 
-      // Generate filename with timestamp
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
       const sanitizedSearchTerm = (searchTerm || "leads")
         .replace(/[^a-z0-9]/gi, "_")
         .toLowerCase();
       const filename = `nexlead_${sanitizedSearchTerm}_${timestamp}.csv`;
 
-      // Detect iOS devices
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-
       if (isIOS) {
-        // iOS-specific export logic
         handleIOSExport(filename);
       } else {
-        // Standard export for other devices
         handleStandardExport(filename);
       }
     } catch (error) {
@@ -343,26 +298,19 @@ const BulkLeadGenerator: React.FC = () => {
   // Handle CSV export specifically for iOS devices
   const handleIOSExport = (filename: string) => {
     try {
-      console.log(
-        "iOS device detected, using pure client-side download approach"
-      );
-
-      // Generate CSV content
       let csvContent =
         "Company Name,Industry,Address,Phone,Website,Contact Name,Contact Position,Contact Email,Contact Phone,Is Decision Maker\n";
 
-      // Add data rows from results
       if (results && results.businesses) {
         results.businesses.forEach((business) => {
           if (!business.contacts || business.contacts.length === 0) {
-            // If no contacts, add one row with just business info
             csvContent +=
               [
-                escapeCsvValue(business.name || ""),
-                escapeCsvValue(business.category || ""),
-                escapeCsvValue(business.address || ""),
-                escapeCsvValue(business.phoneNumber || ""),
-                escapeCsvValue(business.website || ""),
+                `"${business.name || ""}"`,
+                `"${business.category || ""}"`,
+                `"${business.address || ""}"`,
+                `"${business.phoneNumber || ""}"`,
+                `"${business.website || ""}"`,
                 "",
                 "",
                 "",
@@ -370,53 +318,41 @@ const BulkLeadGenerator: React.FC = () => {
                 "",
               ].join(",") + "\n";
           } else {
-            // Add a row for each contact
             business.contacts.forEach((contact) => {
               csvContent +=
                 [
-                  escapeCsvValue(business.name || ""),
-                  escapeCsvValue(business.category || ""),
-                  escapeCsvValue(business.address || ""),
-                  escapeCsvValue(business.phoneNumber || ""),
-                  escapeCsvValue(business.website || ""),
-                  escapeCsvValue(contact.name || ""),
-                  escapeCsvValue(contact.position || ""),
-                  escapeCsvValue(contact.email || ""),
-                  escapeCsvValue(contact.phoneNumber || ""),
-                  escapeCsvValue(contact.isDecisionMaker ? "Yes" : "No"),
+                  `"${business.name || ""}"`,
+                  `"${business.category || ""}"`,
+                  `"${business.address || ""}"`,
+                  `"${business.phoneNumber || ""}"`,
+                  `"${business.website || ""}"`,
+                  `"${contact.name || ""}"`,
+                  `"${contact.position || ""}"`,
+                  `"${contact.email || ""}"`,
+                  `"${contact.phoneNumber || ""}"`,
+                  contact.isDecisionMaker ? "Yes" : "No",
                 ].join(",") + "\n";
             });
           }
         });
       }
 
-      // Create a Blob with the CSV content
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-
-      // Create a data URL for the file
       const dataUrl = URL.createObjectURL(blob);
-
-      // Create an anchor element to trigger the download
       const a = document.createElement("a");
       a.style.display = "none";
       a.href = dataUrl;
       a.download = filename;
-
-      // For iOS, we need to open in a new tab
       a.target = "_blank";
       a.rel = "noopener";
-
-      // Add to DOM, click, and clean up
       document.body.appendChild(a);
       a.click();
 
-      // Cleanup after a short delay
       setTimeout(() => {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(dataUrl);
       }, 100);
 
-      // Show success message
       toast({
         title: "Download Started",
         description:
@@ -438,12 +374,9 @@ const BulkLeadGenerator: React.FC = () => {
   // Handle CSV export for standard browsers
   const handleStandardExport = async (filename: string) => {
     try {
-      // For standard browsers, we can use the server endpoint
       const response = await fetch("/api/bulk-leads/export-csv", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           searchTerm: searchTerm,
           locations: selectedLocations,
@@ -451,33 +384,22 @@ const BulkLeadGenerator: React.FC = () => {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to generate export");
-      }
+      if (!response.ok) throw new Error("Failed to generate export");
 
-      // Get the response as a blob
       const blob = await response.blob();
-
-      // Create a URL for the blob
       const url = window.URL.createObjectURL(blob);
-
-      // Create an anchor element to trigger the download
       const a = document.createElement("a");
       a.style.display = "none";
       a.href = url;
       a.download = filename;
-
-      // Add to DOM, click, and clean up
       document.body.appendChild(a);
       a.click();
 
-      // Cleanup
       setTimeout(() => {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
       }, 100);
 
-      // Show success message
       toast({
         title: "Export Successful",
         description: "Your leads have been exported successfully.",
@@ -496,302 +418,546 @@ const BulkLeadGenerator: React.FC = () => {
   };
 
   return (
-    <div className="bulk-lead-generator">
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>Bulk Lead Generator</CardTitle>
-          <CardDescription>
-            Search for leads across multiple locations simultaneously
-          </CardDescription>
-        </CardHeader>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 py-8 px-0">
+      {" "}
+      {/* Changed px-4 to px-0 */}
+      <motion.div
+        className="max-w-full w-full mx-auto space-y-6 px-4 sm:px-6" // Modified this line
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5 }}
+      >
+        {/* Header */}
+        <motion.div
+          className="text-center"
+          initial={{ y: -20 }}
+          animate={{ y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <h1 className="text-3xl md:text-4xl font-bold text-blue-800 mb-3">
+            Bulk Lead Generator
+          </h1>
+          <p className="text-lg text-blue-600/90 max-w-2xl mx-auto">
+            Discover and connect with multiple businesses at scale
+          </p>
+        </motion.div>
 
-        <CardContent>
-          <form onSubmit={handleSearch} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="search-term">What are you looking for?</Label>
-              <Input
-                id="search-term"
-                placeholder="e.g. Restaurants, Law Firms, Software Companies"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                disabled={isLoading}
-              />
-              <p className="text-sm text-muted-foreground">
-                Enter any business type, industry, or specific search term
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Select Locations</Label>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                {locations.map((location) => (
-                  <div
-                    key={location.name}
-                    className="flex items-center space-x-2"
-                  >
-                    <Checkbox
-                      id={`location-${location.name}`}
-                      checked={selectedLocations.includes(location.name)}
-                      onCheckedChange={() => toggleLocation(location.name)}
-                      disabled={isLoading}
-                    />
-                    <label
-                      htmlFor={`location-${location.name}`}
-                      className="text-sm cursor-pointer"
-                    >
-                      {location.displayName}
-                    </label>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="max-results">
-                  Maximum Results Per Location
-                </Label>
-                <Select
-                  disabled={isLoading}
-                  value={maxResults.toString()}
-                  onValueChange={(value) => setMaxResults(parseInt(value))}
-                >
-                  <SelectTrigger id="max-results">
-                    <SelectValue placeholder="Select max results" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="10">10 results per location</SelectItem>
-                    <SelectItem value="25">25 results per location</SelectItem>
-                    <SelectItem value="50">50 results per location</SelectItem>
-                    <SelectItem value="100">
-                      100 results per location
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2 flex items-end">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="decision-makers"
-                    checked={onlyDecisionMakers}
-                    onCheckedChange={(checked) =>
-                      setOnlyDecisionMakers(!!checked)
-                    }
-                    disabled={isLoading}
-                  />
-                  <label
-                    htmlFor="decision-makers"
-                    className="text-sm cursor-pointer leading-tight"
-                  >
-                    Only show decision makers
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Filter contacts to only include people with
-                      decision-making authority
-                    </p>
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            <Button type="submit" disabled={isLoading} className="w-full">
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Searching...
-                </>
-              ) : (
-                "Search for Leads"
-              )}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      {results && (
-        <Card className="mt-8 w-full">
-          <CardHeader>
-            <CardTitle>Search Results</CardTitle>
-            <CardDescription>
-              Found {results.totalBusinesses} businesses with{" "}
-              {results.totalContacts} contacts across {results.totalLocations}{" "}
-              locations
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-2">
+        {/* Search Card */}
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.2 }}
+        >
+          <Card className="border-0 shadow-lg">
+            <CardHeader className="pb-4 border-b border-blue-100">
+              <div className="flex items-center space-x-3">
+                <Search className="h-6 w-6 text-blue-600" />
                 <div>
-                  <h3 className="text-lg font-medium">
-                    Search: "{searchTerm}"
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Locations:{" "}
-                    {selectedLocations
-                      .map((loc) =>
-                        loc
-                          .replace(/_/g, " ")
-                          .replace(/\b\w/g, (l) => l.toUpperCase())
-                      )
-                      .join(", ")}
-                  </p>
+                  <CardTitle className="text-xl">Find Leads in Bulk</CardTitle>
+                  <CardDescription>
+                    Search across multiple locations simultaneously
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+
+            <CardContent className="pt-6">
+              <form onSubmit={handleSearch} className="space-y-6">
+                {/* Search Term */}
+                <div className="space-y-3">
+                  <Label htmlFor="search-term" className="text-blue-800/90">
+                    What type of businesses are you looking for?
+                  </Label>
+                  <Input
+                    id="search-term"
+                    placeholder="e.g. Restaurants, Law Firms, Software Companies"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    disabled={isLoading}
+                    className="h-12 text-base"
+                  />
                 </div>
 
-                <Button
-                  onClick={handleExport}
-                  disabled={isExporting}
-                  className="w-full md:w-auto"
-                >
-                  {isExporting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Exporting...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="mr-2 h-4 w-4" />
-                      Export to CSV
-                    </>
-                  )}
-                </Button>
-              </div>
-
-              {/* Location Results Summary */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {results.locationResults.map((locResult, index) => (
-                  <div key={index} className="p-4 border rounded-md">
-                    <h4 className="font-medium">
-                      {locResult.location
-                        .replace(/_/g, " ")
-                        .replace(/\b\w/g, (l) => l.toUpperCase())}
-                    </h4>
-                    <p className="text-sm">
-                      {locResult.businessCount} businesses
-                    </p>
-                    <p className="text-sm">{locResult.contactCount} contacts</p>
+                {/* Locations */}
+                <div className="space-y-3">
+                  <Label className="text-blue-800/90">Select Locations</Label>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {locations.map((location) => (
+                      <motion.div
+                        key={location.name}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        <div
+                          className={`flex items-center space-x-2 p-3 rounded-lg border cursor-pointer transition-colors ${
+                            selectedLocations.includes(location.name)
+                              ? "bg-blue-50 border-blue-300"
+                              : "border-gray-200 hover:border-blue-200"
+                          }`}
+                          onClick={() => toggleLocation(location.name)}
+                        >
+                          <Checkbox
+                            id={`location-${location.name}`}
+                            checked={selectedLocations.includes(location.name)}
+                            onCheckedChange={() => {}}
+                            className="pointer-events-none"
+                          />
+                          <label
+                            htmlFor={`location-${location.name}`}
+                            className="text-sm font-medium cursor-pointer"
+                          >
+                            {location.displayName}
+                          </label>
+                        </div>
+                      </motion.div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
 
-              {/* Business Results */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium">Businesses Found</h3>
-
-                <div className="space-y-4">
-                  {results.businesses.slice(0, 20).map((business, index) => (
-                    <div
-                      key={index}
-                      className="p-4 border rounded-md space-y-2"
+                {/* Options Row */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Max Results */}
+                  <div className="space-y-3">
+                    <Label htmlFor="max-results" className="text-blue-800/90">
+                      Results Per Location
+                    </Label>
+                    <Select
+                      disabled={isLoading}
+                      value={maxResults.toString()}
+                      onValueChange={(value) => setMaxResults(parseInt(value))}
                     >
-                      <h4 className="font-medium">{business.name}</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                        <div>
-                          <p>
-                            <strong>Category:</strong> {business.category}
-                          </p>
-                          <p>
-                            <strong>Address:</strong> {business.address}
-                          </p>
-                        </div>
-                        <div>
-                          <p>
-                            <strong>Phone:</strong> {business.phoneNumber}
-                          </p>
-                          <p>
-                            <strong>Website:</strong>{" "}
-                            {business.website ? (
-                              <a
-                                href={business.website}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-600 hover:underline"
-                              >
-                                {business.website.replace(
-                                  /^https?:\/\/(www\.)?/i,
-                                  ""
-                                )}
-                              </a>
-                            ) : (
-                              "N/A"
-                            )}
-                          </p>
-                        </div>
-                      </div>
+                      <SelectTrigger id="max-results" className="h-12">
+                        <SelectValue placeholder="Select max results" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">
+                          10 results per location
+                        </SelectItem>
+                        <SelectItem value="25">
+                          25 results per location
+                        </SelectItem>
+                        <SelectItem value="50">
+                          50 results per location
+                        </SelectItem>
+                        <SelectItem value="100">
+                          100 results per location
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                      {business.contacts && business.contacts.length > 0 ? (
-                        <div className="mt-3">
-                          <p className="font-medium">Contacts:</p>
-                          <div className="divide-y">
-                            {business.contacts.map((contact, contactIndex) => (
-                              <div key={contactIndex} className="py-2 text-sm">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
-                                  <p>
-                                    <strong>Name:</strong> {contact.name}
-                                  </p>
-                                  <p>
-                                    <strong>Position:</strong>{" "}
-                                    {contact.position}
-                                  </p>
-                                  <p>
-                                    <strong>Email:</strong>{" "}
-                                    {contact.email || "N/A"}
-                                  </p>
-                                  <p>
-                                    <strong>Phone:</strong>{" "}
-                                    {contact.phoneNumber || "N/A"}
+                  {/* Decision Makers */}
+                  <div className="space-y-3">
+                    <Label className="text-blue-800/90">Contact Filters</Label>
+                    <div className="flex items-center space-x-3 p-3 rounded-lg border border-gray-200">
+                      <Checkbox
+                        id="decision-makers"
+                        checked={onlyDecisionMakers}
+                        onCheckedChange={(checked) =>
+                          setOnlyDecisionMakers(!!checked)
+                        }
+                        disabled={isLoading}
+                      />
+                      <div>
+                        <label
+                          htmlFor="decision-makers"
+                          className="text-sm font-medium cursor-pointer"
+                        >
+                          Only show decision makers
+                        </label>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Filter to contacts with decision-making authority
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Search Button */}
+                <motion.div
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <Button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full h-12 text-lg bg-blue-600 hover:bg-blue-700"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                        Searching...
+                      </>
+                    ) : (
+                      <>
+                        <Search className="mr-2 h-5 w-5" />
+                        Find Leads
+                      </>
+                    )}
+                  </Button>
+                </motion.div>
+              </form>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Results Section */}
+        <AnimatePresence>
+          {isLoading && (
+            <motion.div
+              className="bg-white border border-blue-100 rounded-xl shadow-sm overflow-hidden"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="p-8 text-center">
+                <div className="inline-flex items-center justify-center space-x-3">
+                  <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                  <span className="text-lg font-medium text-blue-800">
+                    Searching for "{searchTerm}" in {selectedLocations.length}{" "}
+                    locations...
+                  </span>
+                </div>
+                <p className="mt-2 text-muted-foreground">
+                  This may take a moment as we gather comprehensive business
+                  data
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {results && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+              className="space-y-6"
+            >
+              {/* Results Summary Card */}
+              <Card className="border-0 shadow-lg">
+                <CardHeader className="pb-4 border-b border-blue-100">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                      <CardTitle className="text-xl flex items-center space-x-2">
+                        <Bookmark className="h-5 w-5 text-blue-600" />
+                        <span>Search Results</span>
+                      </CardTitle>
+                      <CardDescription className="mt-1">
+                        Found {results.totalBusinesses} businesses with{" "}
+                        {results.totalContacts} contacts
+                      </CardDescription>
+                    </div>
+                    <motion.div
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      <Button
+                        onClick={handleExport}
+                        disabled={isExporting}
+                        className="w-full md:w-auto bg-green-600 hover:bg-green-700"
+                      >
+                        {isExporting ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Exporting...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="mr-2 h-4 w-4" />
+                            Export to CSV
+                          </>
+                        )}
+                      </Button>
+                    </motion.div>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="pt-6">
+                  {/* Location Summary */}
+                  <div className="mb-8">
+                    <h3 className="text-lg font-medium text-blue-800 mb-4">
+                      Results by Location
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {results.locationResults.map((locResult, index) => (
+                        <motion.div
+                          key={index}
+                          whileHover={{ y: -2 }}
+                          className="p-4 border rounded-lg bg-white shadow-sm"
+                        >
+                          <h4 className="font-medium">
+                            {locResult.location
+                              .replace(/_/g, " ")
+                              .replace(/\b\w/g, (l) => l.toUpperCase())}
+                          </h4>
+                          <div className="flex justify-between mt-2">
+                            <div>
+                              <p className="text-sm text-muted-foreground">
+                                Businesses
+                              </p>
+                              <p className="font-medium">
+                                {locResult.businessCount}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">
+                                Contacts
+                              </p>
+                              <p className="font-medium">
+                                {locResult.contactCount}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">
+                                Density
+                              </p>
+                              <p className="font-medium">
+                                {Math.round(
+                                  (locResult.contactCount /
+                                    locResult.businessCount) *
+                                    10
+                                ) / 10}
+                              </p>
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Business Results */}
+                  <div>
+                    <h3 className="text-lg font-medium text-blue-800 mb-4">
+                      Business Details
+                    </h3>
+                    <div className="space-y-4">
+                      {results.businesses
+                        .slice(0, 10)
+                        .map((business, index) => (
+                          <motion.div
+                            key={index}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: index * 0.05 }}
+                            className="border rounded-lg overflow-hidden"
+                          >
+                            <div
+                              className={`p-4 cursor-pointer ${
+                                expandedBusinesses[business.name]
+                                  ? "bg-blue-50 border-b border-blue-100"
+                                  : "bg-white"
+                              }`}
+                              onClick={() =>
+                                toggleBusinessExpansion(business.name)
+                              }
+                            >
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <h4 className="font-medium">
+                                    {business.name}
+                                  </h4>
+                                  <p className="text-sm text-muted-foreground">
+                                    {business.category}
                                   </p>
                                 </div>
-                                {contact.isDecisionMaker && (
-                                  <p className="mt-1 font-medium text-green-600">
-                                    Decision Maker
-                                  </p>
-                                )}
+                                <div className="flex items-center space-x-3">
+                                  {business.contacts &&
+                                    business.contacts.length > 0 && (
+                                      <Badge
+                                        variant="outline"
+                                        className="bg-blue-50 text-blue-700"
+                                      >
+                                        {business.contacts.length} contacts
+                                      </Badge>
+                                    )}
+                                  <ChevronDown
+                                    className={`h-5 w-5 text-blue-600 transition-transform ${
+                                      expandedBusinesses[business.name]
+                                        ? "rotate-180"
+                                        : ""
+                                    }`}
+                                  />
+                                </div>
                               </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">
-                          No contact information available
-                        </p>
-                      )}
+                            </div>
+
+                            <AnimatePresence>
+                              {expandedBusinesses[business.name] && (
+                                <motion.div
+                                  initial={{ height: 0, opacity: 0 }}
+                                  animate={{ height: "auto", opacity: 1 }}
+                                  exit={{ height: 0, opacity: 0 }}
+                                  transition={{ duration: 0.2 }}
+                                  className="overflow-hidden"
+                                >
+                                  <div className="p-4 bg-white border-t">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                      <div>
+                                        <p className="text-sm font-medium text-muted-foreground">
+                                          Address
+                                        </p>
+                                        <p>{business.address}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-medium text-muted-foreground">
+                                          Phone
+                                        </p>
+                                        <p>{business.phoneNumber || "N/A"}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-medium text-muted-foreground">
+                                          Website
+                                        </p>
+                                        {business.website ? (
+                                          <a
+                                            href={business.website}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-blue-600 hover:underline"
+                                          >
+                                            {business.website.replace(
+                                              /^https?:\/\/(www\.)?/i,
+                                              ""
+                                            )}
+                                          </a>
+                                        ) : (
+                                          "N/A"
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {business.contacts &&
+                                    business.contacts.length > 0 ? (
+                                      <div>
+                                        <h5 className="font-medium mb-3">
+                                          Contacts
+                                        </h5>
+                                        <div className="space-y-3">
+                                          {business.contacts.map(
+                                            (contact, contactIndex) => (
+                                              <div
+                                                key={contactIndex}
+                                                className="p-3 border rounded-lg bg-gray-50"
+                                              >
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                  <div>
+                                                    <p className="text-sm font-medium text-muted-foreground">
+                                                      Name
+                                                    </p>
+                                                    <p>{contact.name}</p>
+                                                  </div>
+                                                  <div>
+                                                    <p className="text-sm font-medium text-muted-foreground">
+                                                      Position
+                                                    </p>
+                                                    <p>{contact.position}</p>
+                                                  </div>
+                                                  <div>
+                                                    <p className="text-sm font-medium text-muted-foreground">
+                                                      Email
+                                                    </p>
+                                                    <p>
+                                                      {contact.email || "N/A"}
+                                                    </p>
+                                                  </div>
+                                                  <div>
+                                                    <p className="text-sm font-medium text-muted-foreground">
+                                                      Phone
+                                                    </p>
+                                                    <p>
+                                                      {contact.phoneNumber ||
+                                                        "N/A"}
+                                                    </p>
+                                                  </div>
+                                                </div>
+                                                {contact.isDecisionMaker && (
+                                                  <div className="mt-2">
+                                                    <Badge className="bg-green-100 text-green-800">
+                                                      Decision Maker
+                                                    </Badge>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            )
+                                          )}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <p className="text-sm text-muted-foreground">
+                                        No contact information available
+                                      </p>
+                                    )}
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </motion.div>
+                        ))}
                     </div>
-                  ))}
+
+                    {results.businesses.length > 10 && (
+                      <div className="mt-6 text-center">
+                        <p className="text-sm text-muted-foreground">
+                          Showing 10 of {results.businesses.length} businesses.
+                          Export to CSV to view all results.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Empty State */}
+        <AnimatePresence>
+          {!isLoading && !results && (
+            <motion.div
+              className="p-8 border rounded-xl text-center bg-white shadow-sm"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+            >
+              <div className="mx-auto max-w-md">
+                <div className="flex justify-center">
+                  <div className="p-4 bg-blue-50 rounded-full">
+                    <Search className="h-8 w-8 text-blue-600" />
+                  </div>
                 </div>
-
-                {results.businesses.length > 20 && (
-                  <p className="text-center text-sm text-muted-foreground">
-                    Showing 20 of {results.businesses.length} businesses. Export
-                    to CSV to view all results.
-                  </p>
-                )}
+                <h3 className="mt-4 text-lg font-medium text-blue-800">
+                  No Search Results Yet
+                </h3>
+                <p className="mt-2 text-muted-foreground">
+                  Enter your search criteria above to find business contacts
+                  across multiple locations
+                </p>
+                <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-3 border rounded-lg bg-blue-50/50">
+                    <p className="font-medium">Example searches:</p>
+                    <ul className="mt-1 space-y-1 text-sm text-muted-foreground">
+                      <li>• "Restaurants in New York"</li>
+                      <li>• "Tech startups"</li>
+                      <li>• "Law firms in California"</li>
+                    </ul>
+                  </div>
+                  <div className="p-3 border rounded-lg bg-blue-50/50">
+                    <p className="font-medium">Search tips:</p>
+                    <ul className="mt-1 space-y-1 text-sm text-muted-foreground">
+                      <li>• Select multiple locations</li>
+                      <li>• Try different industry keywords</li>
+                      <li>• Export results to CSV</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
-            </div>
-          </CardContent>
-
-          <CardFooter>
-            <p className="text-sm text-muted-foreground">
-              Data quality score:{" "}
-              {Math.round(
-                (results.totalContacts / results.totalBusinesses) * 10
-              ) / 10}{" "}
-              contacts per business
-            </p>
-          </CardFooter>
-        </Card>
-      )}
-
-      {!isLoading && !results && (
-        <div className="mt-8 p-8 border rounded-md text-center">
-          <SearchX className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium">No Search Results</h3>
-          <p className="text-muted-foreground">
-            Fill in the search form and click "Search for Leads" to find
-            business contacts
-          </p>
-        </div>
-      )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
     </div>
   );
 };

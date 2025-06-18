@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { motion, AnimatePresence } from "framer-motion";
+import { Sparkles, AlertCircle, Loader2, Download, Bookmark, ChevronRight } from "lucide-react";
 import Layout from "@/components/layout";
 import SearchForm from "@/components/search-form";
 import SearchResults from "@/components/search-results";
@@ -9,7 +11,6 @@ import SearchLoadingState from "@/components/search-loading-state";
 import ApiStatusDashboard from "@/components/api-status-dashboard";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { motion } from "framer-motion";
 
 export default function LeadFinder() {
   const [isLoading, setIsLoading] = useState(false);
@@ -36,125 +37,36 @@ export default function LeadFinder() {
       setSearchError(null);
 
       try {
-        // Note: We're using fetch directly here instead of apiRequest to handle response errors manually
-        console.log("DEBUG: Sending search request with data:", searchData);
-
         const response = await fetch("/api/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(searchData),
         });
 
-        console.log(
-          `DEBUG: Response status: ${response.status} ${response.statusText}`
-        );
-
-        // Parse the response data
         const responseText = await response.text();
-        console.log("DEBUG: Raw response:", responseText);
-
         let data;
         try {
           data = JSON.parse(responseText);
-          console.log("DEBUG: Parsed JSON data:", data);
-
-          // Log important pieces of the data structure to debug rendering issues
-          if (data && data.company) {
-            console.log("DEBUG: Company data:", data.company);
+          if (!data.contacts || !Array.isArray(data.contacts)) {
+            data.contacts = [];
           }
-
-          if (data && data.contacts) {
-            console.log("DEBUG: Contacts data:", data.contacts);
-            console.log("DEBUG: Contacts array length:", data.contacts.length);
-          }
+          return data;
         } catch (e) {
-          console.error("DEBUG: Failed to parse JSON response:", e);
           throw new Error(`Invalid response from server: ${responseText}`);
         }
-
-        // Check for error in the response
-        if (!response.ok) {
-          console.error(
-            "DEBUG: Search error - status:",
-            response.status,
-            "data:",
-            data
-          );
-
-          // Handle specific error types
-          if (data && data.error) {
-            if (typeof data.error === "object" && data.error.code) {
-              if (data.error.code === "PLACES_API_REQUEST_DENIED") {
-                throw new Error(
-                  "Google Places API access is currently unavailable. Please enable the Places API for your Google API key."
-                );
-              } else if (data.error.code === "PLACES_API_QUERY_LIMIT") {
-                throw new Error(
-                  "We've reached our daily search limit. Please try again tomorrow."
-                );
-              } else {
-                throw new Error(
-                  data.error.message || "API error: " + data.error.code
-                );
-              }
-            } else {
-              throw new Error(
-                typeof data.error === "string"
-                  ? data.error
-                  : "An error occurred during search"
-              );
-            }
-          } else {
-            throw new Error(
-              `API error (${response.status}): ${response.statusText}`
-            );
-          }
-        }
-
-        // Ensure data structure is as expected to prevent rendering errors
-        if (!data || typeof data !== "object") {
-          console.error("DEBUG: Data is not a valid object:", data);
-          throw new Error("Invalid data format received from server");
-        }
-
-        if (!data.company || typeof data.company !== "object") {
-          console.error("DEBUG: Missing or invalid company data:", data);
-          throw new Error("Missing company information in search results");
-        }
-
-        // Ensure contacts exists and is an array, even if empty
-        if (!data.contacts || !Array.isArray(data.contacts)) {
-          console.log("DEBUG: Creating empty contacts array for data:", data);
-          data.contacts = [];
-        }
-
-        // Verify other required fields for rendering
-        console.log("DEBUG: Data ready for return:", data);
-        return data;
       } catch (error) {
-        console.error("DEBUG: Search request failed:", error);
         throw error;
       } finally {
         setIsLoading(false);
       }
     },
     onSuccess: (data) => {
-      console.log("DEBUG: Search successful, got data:", data);
-      // Explicitly log the structure needed for rendering
-      console.log("DEBUG: Company data for rendering:", data.company);
-      console.log("DEBUG: Contacts data for rendering:", data.contacts);
-
-      // Make sure search results is properly set
       setSearchResults(data);
       setSearchError(null);
-
-      // Invalidate saved leads query in case we've updated them
       queryClient.invalidateQueries({ queryKey: ["/api/saved-leads"] });
-      // Invalidate search history
       queryClient.invalidateQueries({ queryKey: ["/api/search-history"] });
     },
     onError: (error) => {
-      console.error("DEBUG: Search mutation error:", error);
       setSearchResults(null);
       const errorMessage =
         error instanceof Error ? error.message : "Failed to search for leads";
@@ -195,23 +107,18 @@ export default function LeadFinder() {
     },
   });
 
-  // Handle search form submission
   const handleSearch = (formData: any) => {
-    // Save the search parameters for the loading screen
     setSearchParams({
       industry: formData.industry || undefined,
       company: formData.company || undefined,
     });
-
     searchMutation.mutate(formData);
   };
 
-  // Handle save lead
   const handleSaveLead = (contactId: number) => {
     saveMutation.mutate(contactId);
   };
 
-  // Handle export button click
   const handleExport = () => {
     setIsExportModalOpen(true);
   };
@@ -219,97 +126,173 @@ export default function LeadFinder() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-10">
       <motion.div
-        className="max-w-5xl w-full mx-auto px-2 sm:px-6"
+        className="max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8"
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
       >
-        <SearchForm onSearch={handleSearch} isLoading={isLoading} />
-        {isLoading && (
-          <div className="bg-white border border-gray-200 rounded-md shadow-sm mb-6">
-            <SearchLoadingState
-              industry={searchParams.industry}
-              company={searchParams.company}
-              isVisible={isLoading}
-            />
-          </div>
-        )}
-        {!isLoading && searchError ? (
-          <div className="bg-red-50 border border-red-200 text-red-800 rounded-md p-4 mb-6">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg
-                  className="h-5 w-5 text-red-500"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-800">
-                  Search Error
-                </h3>
-                <div className="mt-2 text-sm text-red-700">
-                  <p>{searchError}</p>
-                  {searchError.includes("Google Places API") ? (
-                    <div>
-                      <p className="mt-2">
-                        <strong>API Access Issue:</strong> We're currently
-                        experiencing an issue with our data provider connection.
-                        The application can only show real business data from
-                        Google Places API, and this service is temporarily
-                        unavailable.
-                      </p>
-                      <p className="mt-2">
-                        <strong>Technical Details:</strong>{" "}
-                        {searchError.includes("enable")
-                          ? "The Google Places API needs to be enabled for the API key being used."
-                          : "There's an issue with the Google Places API configuration."}
-                      </p>
-                      <p className="mt-2">
-                        <strong>What you can do:</strong> This is a server
-                        configuration issue that requires administrator
-                        attention. Please try again later once the API access
-                        has been properly configured.
-                      </p>
+        {/* Header Section */}
+        <motion.div 
+          className="mb-8 text-center"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+        >
+          <motion.h1 
+            className="text-3xl md:text-4xl font-bold text-blue-800 mb-3"
+            initial={{ y: -20 }}
+            animate={{ y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            Find Your Perfect Leads
+          </motion.h1>
+          <motion.p 
+            className="text-lg text-blue-600/90 max-w-2xl mx-auto"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4 }}
+          >
+            Discover verified business contacts with our powerful search engine
+          </motion.p>
+        </motion.div>
+
+        {/* Search Form */}
+        <motion.div
+          className="mb-8"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+        >
+          <SearchForm onSearch={handleSearch} isLoading={isLoading} />
+        </motion.div>
+
+        {/* Loading State */}
+        <AnimatePresence>
+          {isLoading && (
+            <motion.div
+              className="bg-white border border-blue-100 rounded-xl shadow-sm mb-8 overflow-hidden"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <SearchLoadingState
+                industry={searchParams.industry}
+                company={searchParams.company}
+                isVisible={isLoading}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Error State */}
+        <AnimatePresence>
+          {!isLoading && searchError && (
+            <motion.div
+              className="mb-8"
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="bg-red-50 border border-red-200 rounded-xl p-6 shadow-sm">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <AlertCircle className="h-6 w-6 text-red-500" />
+                  </div>
+                  <div className="ml-4">
+                    <h3 className="text-lg font-medium text-red-800 mb-2">
+                      Search Error
+                    </h3>
+                    <div className="text-red-700 space-y-3">
+                      <p>{searchError}</p>
+                      {searchError.includes("Google Places API") ? (
+                        <div className="space-y-2">
+                          <p>
+                            <strong>API Access Issue:</strong> We're currently experiencing an issue with our data provider connection.
+                          </p>
+                          <div className="bg-red-100/50 p-3 rounded-lg border border-red-200/50">
+                            <p className="font-medium text-sm">What you can do:</p>
+                            <ul className="list-disc pl-5 mt-1 space-y-1 text-sm">
+                              <li>Try again later</li>
+                              <li>Contact support if the issue persists</li>
+                              <li>Try a different search query</li>
+                            </ul>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                            <p className="font-medium text-blue-800 text-sm">Search tips:</p>
+                            <ul className="list-disc pl-5 mt-1 space-y-1 text-sm text-blue-700">
+                              <li>Use specific company names</li>
+                              <li>Include location for better results</li>
+                              <li>Try different industry keywords</li>
+                            </ul>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <div>
-                      <p className="mt-2">
-                        <strong>Tips:</strong> For best results, try searching
-                        for a specific company name that has publicly available
-                        information. Our system only returns 100% real data from
-                        publicly available sources.
-                      </p>
-                      <p className="mt-2">
-                        Example searches: "Google in California", "Microsoft in
-                        Seattle", "Apple Inc"
-                      </p>
-                    </div>
-                  )}
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        ) : !isLoading && searchResults ? (
-          <SearchResults
-            results={searchResults}
-            isLoading={false}
-            onSaveLead={handleSaveLead}
-            onExport={handleExport}
-          />
-        ) : null}
-        <div className="mt-6">
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Search Results */}
+        <AnimatePresence>
+          {!isLoading && searchResults && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              <SearchResults
+                results={searchResults}
+                isLoading={false}
+                onSaveLead={handleSaveLead}
+                onExport={handleExport}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* API Status Dashboard */}
+        <motion.div 
+          className="mt-10"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.6 }}
+        >
           <ApiStatusDashboard />
-        </div>
+        </motion.div>
+
+        {/* Saved Leads */}
         {savedLeads && Array.isArray(savedLeads) && savedLeads.length > 0 && (
-          <SavedLeads leads={savedLeads} isLoading={savedLeadsLoading} />
+          <motion.div
+            className="mt-10"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.7 }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-blue-800 flex items-center">
+                <Bookmark className="h-5 w-5 text-blue-600 mr-2" />
+                Your Saved Leads
+              </h2>
+              <button 
+                className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              >
+                Back to search <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+            <SavedLeads leads={savedLeads} isLoading={savedLeadsLoading} />
+          </motion.div>
         )}
+
+        {/* Export Modal */}
         <ExportModal
           isOpen={isExportModalOpen}
           onClose={() => setIsExportModalOpen(false)}
